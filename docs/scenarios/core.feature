@@ -22,3 +22,20 @@ Funcionalidade: fundação pública do Clear CRUD
       | editar | update |
       | apagar | delete |
       | ajuda  | help   |
+
+  Cenário: registry lacrado não aceita recurso novo
+    Dado um registry com uma definição válida
+    Quando o host finaliza o startup e lacra o registry
+    Então nenhuma nova definição pode ser registrada
+    E a definição existente continua disponível para leitura
+
+  Cenário: registry não deixa definição mutar depois do startup
+    Dado uma definição válida com slices de campos e paginação
+    Quando o host a registra e altera o valor original
+    Então o registry preserva a cópia validada
+    E o consumidor que lê a definição também recebe uma cópia defensiva
+
+  Cenário: recurso mutável exige garantias reais
+    Dado uma definição com criação, edição ou exclusão
+    Quando o DataSource não declara atomic_version e unit_of_work
+    Então o registro falha antes de o recurso ser exposto
