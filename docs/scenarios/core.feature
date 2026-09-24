@@ -74,3 +74,14 @@ Funcionalidade: fundação pública do Clear CRUD
     Quando o audit sink falha na unidade de trabalho
     Então a operação retorna indisponibilidade temporária sem detalhe técnico
     E o hook posterior não é executado
+
+  Cenário: adapter declarado conforme não atravessa o escopo
+    Dado um adapter real exercitado pela suíte pública de conformidade
+    Quando um registro criado no tenant A é buscado pelo tenant B
+    Então o adapter retorna not_found sem revelar o registro
+
+  Cenário: capability declarada tem comportamento verificável
+    Dado um adapter que declara atomic_version e unit_of_work
+    Quando duas alterações usam a mesma versão e uma transação falha
+    Então exatamente uma alteração é confirmada
+    E a mutação da transação falha é desfeita
