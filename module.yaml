@@ -1,0 +1,31 @@
+manifest_version: "clear.module.v1"
+module_id: "clear.crud"
+module_version: "0.1.0-dev.1"
+capability_class: "shared-capability"
+lifecycle: "proposed"
+owner:
+  repository: "clear-platform-br/clear-crud"
+  contact: "github:clear-platform-br/clear-crud"
+contracts:
+  publishes:
+    - id: "clear.crud.definition.v1"
+      version_range: ">=1.0.0 <2.0.0"
+    - id: "clear.crud.datasource.v1"
+      version_range: ">=1.0.0 <2.0.0"
+    - id: "clear.crud.http.v1"
+      version_range: ">=1.0.0 <2.0.0"
+    - id: "clear.crud.renderer.v1"
+      version_range: ">=1.0.0 <2.0.0"
+  consumes: []
+dependencies:
+  required: []
+  optional:
+    - module_id: "clear.core"
+      version_range: ">=0.1.0 <1.0.0"
+configuration:
+  tenant_required: false
+  secrets_required: false
+compatibility:
+  api_policy: "semver"
+  migration_guide: "docs/migrations.md"
+  rollback: "reinstall-previous-version-and-keep-product-data"
