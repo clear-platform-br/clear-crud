@@ -39,3 +39,10 @@ Funcionalidade: fundação pública do Clear CRUD
     Dado uma definição com criação, edição ou exclusão
     Quando o DataSource não declara atomic_version e unit_of_work
     Então o registro falha antes de o recurso ser exposto
+
+  Cenário: alteração preserva o gate de regressão
+    Dado uma alteração no core público
+    Quando a suíte de validação é executada
+    Então build, testes, race detector e vet passam
+    E a cobertura global permanece no mínimo em 90 por cento
+    E os ramos críticos alterados têm testes explícitos de sucesso e recusa

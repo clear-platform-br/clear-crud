@@ -29,6 +29,9 @@ O contrato canônico é governado no repositório `clear_platform` pelos IDs:
 - Documentação durável e cenários operacionais usam pt-BR.
 - Antes de concluir alteração Go, executar `gofmt`, `go test ./...`,
   `go test -race ./...` e `go vet ./...`.
+- `make validate` é o gate de regressão obrigatório: build, testes unitários,
+  race detector, vet e cobertura. A cobertura global não pode cair de 90%; o
+  alvo contínuo é 95%, sem substituir testes explícitos dos ramos críticos.
 - Cada PR deve alterar uma fatia pequena e manter os contratos existentes
   compatíveis ou registrar nova major com guia de migração.
 - Adapters executam a suíte de conformidade; mocks não substituem banco real.
