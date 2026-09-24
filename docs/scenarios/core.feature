@@ -62,3 +62,15 @@ Funcionalidade: fundação pública do Clear CRUD
     Quando o operador tenta consultar o CRUD
     Então a requisição é recusada como inválida ou inexistente
     E o datasource não recebe a consulta
+
+  Cenário: mutação e auditoria compartilham confirmação
+    Dado uma criação autorizada em recurso mutável
+    Quando a persistência e a auditoria concluem na mesma unidade de trabalho
+    Então o registro e o evento de auditoria são confirmados
+    E o hook posterior é executado somente após a confirmação
+
+  Cenário: auditoria indisponível impede mutação
+    Dado uma criação autorizada em recurso mutável
+    Quando o audit sink falha na unidade de trabalho
+    Então a operação retorna indisponibilidade temporária sem detalhe técnico
+    E o hook posterior não é executado

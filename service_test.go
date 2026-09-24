@@ -53,6 +53,8 @@ func TestServiceDefinitionExposesOnlyRendererMetadataAndAllowedActions(t *testin
 	if err != nil || again.Fields[0].Label != "crud.contact_categories.name" {
 		t.Fatalf("Definition() must return defensive metadata: %#v, %v", again, err)
 	}
+	_, err = service.Definition(context.Background(), "missing")
+	assertCode(t, err, ErrorNotFound)
 }
 
 func TestServiceListNormalizesScopeQueryAndRecordFields(t *testing.T) {
@@ -144,6 +146,30 @@ func TestServiceGetReauthorizesLoadedRecordAndSanitizesOutput(t *testing.T) {
 
 	_, err = service.Get(context.Background(), "contact_categories", "")
 	assertCode(t, err, ErrorInvalidRequest)
+}
+
+func TestServiceGetAndLookupSuccessAndFailures(t *testing.T) {
+	t.Parallel()
+
+	source := &recordingSource{getRecord: Record{ID: "1", Version: 2, Fields: Fields{"name": "Ana", "internal": "x"}}}
+	service := newServiceForTest(t, source, &recordingAuthorizer{})
+	record, err := service.Get(context.Background(), "contact_categories", "1")
+	if err != nil || record.Fields["name"] != "Ana" {
+		t.Fatalf("Get() = %#v, %v", record, err)
+	}
+	if _, leaked := record.Fields["internal"]; leaked {
+		t.Fatal("Get() leaked an unknown field")
+	}
+	source.getErr = errors.New("driver failure")
+	_, err = service.Get(context.Background(), "contact_categories", "1")
+	assertCode(t, err, ErrorTemporarilyUnavailable)
+
+	lookupSource := &recordingSource{capabilities: capabilitiesWithLookup(), lookupErr: errors.New("driver failure")}
+	lookupService := newServiceWithLookup(t, lookupSource, &recordingAuthorizer{})
+	_, err = lookupService.Lookup(context.Background(), "contact_categories", "missing", LookupQuery{})
+	assertCode(t, err, ErrorInvalidRequest)
+	_, err = lookupService.Lookup(context.Background(), "contact_categories", "category", LookupQuery{})
+	assertCode(t, err, ErrorTemporarilyUnavailable)
 }
 
 func TestServiceLookupRestrictsDependenciesAndNormalizesPage(t *testing.T) {

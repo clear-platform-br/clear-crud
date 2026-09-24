@@ -33,6 +33,8 @@ O contrato canônico é governado no repositório `clear_platform` pelos IDs:
   race detector, vet, cobertura e govulncheck. A cobertura global não pode
   cair de 90%; o alvo contínuo é 95%, sem substituir testes explícitos dos
   ramos críticos.
+- Auditoria de mutações é transacional e obrigatória; telemetria de leituras é
+  opcional, assíncrona e nunca pode degradar ou bloquear o CRUD.
 - Cada PR deve alterar uma fatia pequena e manter os contratos existentes
   compatíveis ou registrar nova major com guia de migração.
 - Adapters executam a suíte de conformidade; mocks não substituem banco real.

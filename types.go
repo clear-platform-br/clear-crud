@@ -80,8 +80,12 @@ type Mutation struct {
 type DeleteMode string
 
 const (
-	DeleteModeNone       DeleteMode = "none"
-	DeleteModeArchive    DeleteMode = "archive"
+	DeleteModeNone DeleteMode = "none"
+	// DeleteModeArchive preserves the record as archived. It is the v1 soft-delete policy.
+	DeleteModeArchive DeleteMode = "archive"
+	// DeleteModeSoftDelete is the explicit name for the archive policy.
+	// It has the same wire value to keep v1 definitions compatible.
+	DeleteModeSoftDelete DeleteMode = DeleteModeArchive
 	DeleteModeHardDelete DeleteMode = "hard_delete"
 )
 
