@@ -43,8 +43,14 @@ versão e só então é implementada neste módulo.
 
 ## Estado atual
 
-PR 1 cria o módulo Go, identificadores públicos e erros sanitizáveis. Não há
-persistência, HTTP, SQL, frontend ou recurso utilizável nesta etapa.
+- PRs 1 a 5: tipos públicos, definições lacradas, serviço com autorização e
+  escopo, mutações transacionais auditáveis e suíte de conformidade pública.
+- PR 6: `sqladapter.SimpleTable` executa a conformidade contra SQLite real,
+  sem importar driver no código publicado.
+
+O adapter SQLite é a referência inicial de `simple_table`. Postgres, MySQL e
+MariaDB ainda não foram implementados; a API permanece desacoplada deles e os
+adapters futuros executarão a mesma suíte de conformidade.
 
 ## Desenvolvimento
 
