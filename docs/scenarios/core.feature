@@ -46,3 +46,19 @@ Funcionalidade: fundação pública do Clear CRUD
     Então build, testes, race detector e vet passam
     E a cobertura global permanece no mínimo em 90 por cento
     E os ramos críticos alterados têm testes explícitos de sucesso e recusa
+
+  Cenário: leitura usa escopo confiável antes do datasource
+    Dado um recurso com escopo tenant_id obrigatório
+    Quando o host não resolve o tenant_id do principal
+    Então a operação falha sem chamar o datasource
+
+  Cenário: consulta recebe ordenação determinística
+    Dado um recurso com ordenação padrão por nome
+    Quando o operador lista os registros sem escolher ordenação
+    Então o datasource recebe a ordenação padrão seguida pelo identificador
+
+  Cenário: identificador malicioso não chega ao datasource
+    Dado uma requisição com resource, campo ou ordenação fora da allowlist
+    Quando o operador tenta consultar o CRUD
+    Então a requisição é recusada como inválida ou inexistente
+    E o datasource não recebe a consulta
