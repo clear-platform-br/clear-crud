@@ -8,6 +8,43 @@ Fonte dos contratos: `clear_platform` (`clear.crud.definition.v1`,
 `clear.crud.datasource.v1`, `clear.crud.http.v1` e
 `clear.crud.renderer.v1`). Este documento ensina o uso; não altera contratos.
 
+## Regra de 30 segundos — use esta primeiro
+
+Responda às três perguntas, nesta ordem:
+
+1. O operador só administra registros individuais: listar, buscar, incluir,
+   editar, arquivar/excluir?
+2. Salvar esse registro não dispara envio, pagamento, documento, aprovação,
+   lote, integração externa ou etapa humana especial?
+3. A release pública escolhida já possui **adapter de dados e renderer padrão**
+   para este caso?
+
+| Respostas | Decisão obrigatória | Próxima ação |
+| --- | --- | --- |
+| 1 = sim, 2 = sim, 3 = sim | `USE CLEAR-CRUD` | Siga a receita de cinco passos abaixo. |
+| 1 = não ou 2 = não | `CASO PRÓPRIO` | Escreva a tela/caso de uso do produto; não recrie motor CRUD. |
+| 3 = não | `BLOQUEADO POR LACUNA` | Não escreva fallback local. Registre a lacuna no `clear-crud`. |
+
+Não existe quarta saída. Em especial, “vou criar uma pequena tabela/paginação
+temporária no produto” é proibido.
+
+## Receita de cinco passos — quando a decisão for `USE CLEAR-CRUD`
+
+1. **Fixe a release pública.** Sem `replace`, cópia, fork, `vendor` ou
+   `internal`.
+2. **Use o bootstrap oficial já existente no host.** Não crie outro por recurso.
+3. **Crie uma definição curta.** Somente chave, campos, rótulos, permissões,
+   escopo, lookups, validações e política de exclusão.
+4. **Monte o renderer oficial pela chave do recurso.** Não escreva tabela,
+   formulário, paginação, busca, cliente HTTP, handler ou mensagens CRUD.
+5. **Teste a definição e a integração.** Escopo, permissão, validação,
+   concorrência, exclusão e ausência de PII onde aplicável.
+
+Além de migration, tradução/tema e testes, a integração de um recurso não pode
+criar código genérico. Se parecer que são necessários dois ou mais arquivos de
+infraestrutura CRUD no produto, pare: a decisão está errada ou a release pública
+não cobre o caso.
+
 ## Regra de propriedade
 
 `clear-crud` possui comportamento genérico: definição, validação estrutural,
