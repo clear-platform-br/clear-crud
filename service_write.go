@@ -12,7 +12,13 @@ func (service *Service) Create(ctx context.Context, key ResourceKey, mutation Mu
 	if err != nil {
 		return Record{}, err
 	}
+	detailChanges, err := service.normalizeDetailChanges(ctx, state, normalized.Details)
+	if err != nil {
+		return Record{}, err
+	}
+	normalized.Details = nil
 	var created Record
+	var detailEvents []detailEvent
 	err = state.definition.UOW.Within(ctx, func(transaction context.Context) error {
 		if state.definition.Hooks.BeforeCreate != nil {
 			if err := state.definition.Hooks.BeforeCreate(transaction, state.scope, normalized); err != nil {
@@ -26,13 +32,25 @@ func (service *Service) Create(ctx context.Context, key ResourceKey, mutation Mu
 		if err := service.audit.Append(transaction, service.auditEvent(state, ActionCreate, record.ID, 0, record.Version)); err != nil {
 			return unavailable(err)
 		}
+		detailEvents, err = service.applyDetailChanges(transaction, state, record.ID, detailChanges)
+		if err != nil {
+			return err
+		}
+		details, err := service.loadDetails(transaction, state, record.ID)
+		if err != nil {
+			return err
+		}
 		created = sanitizeRecord(state.definition, record)
+		created.Details = details
 		return nil
 	})
 	if err != nil {
 		return Record{}, unavailable(err)
 	}
 	service.afterCommit(ctx, state.definition, MutationEvent{Action: ActionCreate, Record: created})
+	for _, event := range detailEvents {
+		service.afterCommit(ctx, event.definition, event.event)
+	}
 	return created, nil
 }
 
@@ -49,7 +67,13 @@ func (service *Service) Update(ctx context.Context, key ResourceKey, id RecordID
 	if err != nil {
 		return Record{}, err
 	}
+	detailChanges, err := service.normalizeDetailChanges(ctx, state, normalized.Details)
+	if err != nil {
+		return Record{}, err
+	}
+	normalized.Details = nil
 	var updated Record
+	var detailEvents []detailEvent
 	err = state.definition.UOW.Within(ctx, func(transaction context.Context) error {
 		current, err := state.definition.Source.Get(transaction, state.scope, id)
 		if err != nil {
@@ -70,13 +94,25 @@ func (service *Service) Update(ctx context.Context, key ResourceKey, id RecordID
 		if err := service.audit.Append(transaction, service.auditEvent(state, ActionUpdate, id, version, record.Version)); err != nil {
 			return unavailable(err)
 		}
+		detailEvents, err = service.applyDetailChanges(transaction, state, id, detailChanges)
+		if err != nil {
+			return err
+		}
+		details, err := service.loadDetails(transaction, state, id)
+		if err != nil {
+			return err
+		}
 		updated = sanitizeRecord(state.definition, record)
+		updated.Details = details
 		return nil
 	})
 	if err != nil {
 		return Record{}, unavailable(err)
 	}
 	service.afterCommit(ctx, state.definition, MutationEvent{Action: ActionUpdate, Record: updated})
+	for _, event := range detailEvents {
+		service.afterCommit(ctx, event.definition, event.event)
+	}
 	return updated, nil
 }
 

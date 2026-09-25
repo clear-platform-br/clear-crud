@@ -120,6 +120,7 @@ func cloneDefinition(definition Definition) Definition {
 			clone.Fields[index].Lookup = &lookup
 		}
 	}
+	clone.Details = append([]DetailDefinition(nil), definition.Details...)
 	clone.List.Columns = append([]FieldKey(nil), definition.List.Columns...)
 	clone.List.Searchable = append([]FieldKey(nil), definition.List.Searchable...)
 	clone.List.Sortable = append([]FieldKey(nil), definition.List.Sortable...)

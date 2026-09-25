@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	crud "github.com/clear-platform-br/clear-crud"
 	"github.com/clear-platform-br/clear-crud/conformance"
@@ -90,6 +91,100 @@ func TestSimpleTableQueryAndPolicies(t *testing.T) {
 	requireCode(t, plain.Delete(ctx, fixture.ScopeA, record.ID, record.Version+1, crud.DeleteModeHardDelete), crud.ErrorConflict)
 }
 
+func TestSQLiteSimpleTablesShareMasterDetailTransaction(t *testing.T) {
+	database, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	database.SetMaxOpenConns(1)
+	if _, err := database.Exec(`CREATE TABLE contacts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        archived INTEGER NOT NULL DEFAULT 0
+    ); CREATE TABLE contact_destinations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id TEXT NOT NULL,
+        contact_id TEXT NOT NULL,
+        address TEXT NOT NULL CHECK(address <> 'broken'),
+        version INTEGER NOT NULL,
+        archived INTEGER NOT NULL DEFAULT 0
+    )`); err != nil {
+		t.Fatal(err)
+	}
+	contacts, err := NewSimpleTable(database, TableDefinition{
+		Table: mustIdentifier("contacts"), IDColumn: mustIdentifier("id"), VersionColumn: mustIdentifier("version"),
+		ScopeColumns: map[string]Identifier{"tenant_id": mustIdentifier("tenant_id")}, ArchiveColumn: identifierPointer(mustIdentifier("archived")),
+		Fields: map[crud.FieldKey]Identifier{"name": mustIdentifier("name")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	destinations, err := NewSimpleTable(database, TableDefinition{
+		Table: mustIdentifier("contact_destinations"), IDColumn: mustIdentifier("id"), VersionColumn: mustIdentifier("version"),
+		ScopeColumns: map[string]Identifier{"tenant_id": mustIdentifier("tenant_id")}, ArchiveColumn: identifierPointer(mustIdentifier("archived")),
+		Fields: map[crud.FieldKey]Identifier{"contact_id": mustIdentifier("contact_id"), "address": mustIdentifier("address")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := crud.NewRegistry()
+	parent := sqliteCRUDDefinition("contacts", contacts, []crud.Field{{Key: "name", Label: "crud.contact.name", Type: crud.FieldString, Required: true, Visible: true}}, []crud.FieldKey{"name"})
+	parent.Details = []crud.DetailDefinition{{Key: "destinations", Resource: "contact_destinations", ParentField: "contact_id", Minimum: 1, Maximum: 2, AllowCreate: true, AllowUpdate: true, AllowDelete: true}}
+	child := sqliteCRUDDefinition("contact_destinations", destinations, []crud.Field{
+		{Key: "address", Label: "crud.destination.address", Type: crud.FieldString, Required: true, Visible: true},
+		{Key: "contact_id", Label: "crud.destination.contact", Type: crud.FieldString, Required: true, ReadOnly: true, Visible: false},
+	}, []crud.FieldKey{"address"})
+	for _, definition := range []crud.Definition{parent, child} {
+		if err := registry.Register(context.Background(), definition); err != nil {
+			t.Fatal(err)
+		}
+	}
+	service, err := crud.NewService(crud.Dependencies{
+		Registry: registry, Principal: sqlPrincipal{}, Scope: sqlScope{}, Authorizer: sqlAuthorizer{}, Audit: sqlAudit{}, Translator: sqlTranslator{}, Clock: sqlClock{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := service.Create(context.Background(), "contacts", crud.Mutation{
+		Fields:  crud.Fields{"name": "Ana"},
+		Details: crud.DetailMutations{"destinations": {{Fields: crud.Fields{"address": "ana@example.com"}}}},
+	})
+	if err != nil || len(created.Details["destinations"]) != 1 {
+		t.Fatalf("Create() = %#v, %v", created, err)
+	}
+	var contactID, contactCount, destinationCount string
+	if err := database.QueryRow(`SELECT id, (SELECT COUNT(*) FROM contacts), (SELECT COUNT(*) FROM contact_destinations) FROM contacts`).Scan(&contactID, &contactCount, &destinationCount); err != nil {
+		t.Fatal(err)
+	}
+	if contactCount != "1" || destinationCount != "1" {
+		t.Fatalf("successful transaction counts = contacts:%s destinations:%s", contactCount, destinationCount)
+	}
+	var storedParentID string
+	if err := database.QueryRow(`SELECT contact_id FROM contact_destinations`).Scan(&storedParentID); err != nil {
+		t.Fatal(err)
+	}
+	if storedParentID != contactID {
+		t.Fatalf("stored parent id = %q, want %q", storedParentID, contactID)
+	}
+	_, err = service.Create(context.Background(), "contacts", crud.Mutation{
+		Fields:  crud.Fields{"name": "Bruno"},
+		Details: crud.DetailMutations{"destinations": {{Fields: crud.Fields{"address": "broken"}}}},
+	})
+	var public *crud.Error
+	if !errors.As(err, &public) || public.Code != crud.ErrorTemporarilyUnavailable {
+		t.Fatalf("failed child write error = %v", err)
+	}
+	if err := database.QueryRow(`SELECT COUNT(*) FROM contacts`).Scan(&contactCount); err != nil {
+		t.Fatal(err)
+	}
+	if contactCount != "1" {
+		t.Fatalf("failed child write committed its parent: contacts=%s", contactCount)
+	}
+}
+
 func TestFilterOperators(t *testing.T) {
 	valid := []crud.FilterOperator{crud.FilterEqual, crud.FilterNotEqual, crud.FilterLessThan, crud.FilterLessOrEqual, crud.FilterGreaterThan, crud.FilterGreaterOrEqual, crud.FilterContains, crud.FilterPrefix, crud.FilterIsNull}
 	for _, operator := range valid {
@@ -155,3 +250,48 @@ func mustIdentifier(value string) Identifier {
 }
 
 func identifierPointer(value Identifier) *Identifier { return &value }
+
+func sqliteCRUDDefinition(key crud.ResourceKey, source *SimpleTable, fields []crud.Field, columns []crud.FieldKey) crud.Definition {
+	return crud.Definition{
+		Contract: crud.ContractDefinitionV1, Key: key,
+		Labels:       crud.Labels{Title: crud.MessageCode("crud." + string(key) + ".title"), Singular: crud.MessageCode("crud." + string(key) + ".singular")},
+		Scope:        crud.ScopeRequirements{Keys: []string{"tenant_id"}},
+		Permissions:  crud.Permissions{Create: "create", Read: "read", Update: "update", Delete: "delete"},
+		Fields:       fields,
+		List:         crud.ListDefinition{Columns: columns, Searchable: columns, Sortable: columns, DefaultSort: []crud.Sort{{Field: columns[0], Direction: crud.SortAscending}}, Pagination: crud.PaginationDefinition{Mode: crud.PageModeOffset, DefaultSize: 25, AllowedSizes: []uint16{25, 50, 100}, Total: true}},
+		Presentation: crud.Presentation{Collection: crud.CollectionAuto, Density: crud.DensityCompact},
+		Source:       source, UOW: source, Delete: crud.DeletePolicy{Mode: crud.DeleteModeArchive}, Concurrency: crud.ConcurrencyPolicy{Mode: crud.ConcurrencyVersion},
+	}
+}
+
+type sqlPrincipal struct{}
+
+func (sqlPrincipal) Principal(context.Context) (crud.Principal, error) {
+	return crud.Principal{ID: "operator"}, nil
+}
+
+type sqlScope struct{}
+
+func (sqlScope) Scope(context.Context, crud.ResourceKey) (crud.Scope, error) {
+	return crud.Scope{"tenant_id": "tenant-a"}, nil
+}
+
+type sqlAuthorizer struct{}
+
+func (sqlAuthorizer) Authorize(context.Context, crud.Principal, crud.ResourceKey, crud.Action, *crud.Record) error {
+	return nil
+}
+
+type sqlAudit struct{}
+
+func (sqlAudit) Append(context.Context, crud.AuditEvent) error { return nil }
+
+type sqlTranslator struct{}
+
+func (sqlTranslator) Message(_ context.Context, code crud.MessageCode, _ map[string]any) string {
+	return string(code)
+}
+
+type sqlClock struct{}
+
+func (sqlClock) Now() time.Time { return time.Time{} }

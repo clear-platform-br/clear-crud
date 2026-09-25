@@ -8,6 +8,9 @@ type ResourceKey string
 // FieldKey identifies a field declared by a resource definition.
 type FieldKey string
 
+// DetailKey identifies a registered child collection of a master-detail resource.
+type DetailKey string
+
 // RecordID is the opaque public identity of a record.
 // Adapters resolve it to their physical identity format.
 type RecordID string
@@ -69,12 +72,29 @@ type Record struct {
 	ID      RecordID
 	Version Version
 	Fields  Fields
+	Details DetailRecords
 }
+
+// DetailRecords groups child records by their server-registered collection key.
+type DetailRecords map[DetailKey][]Record
 
 // Mutation contains only writable field values after core validation.
 type Mutation struct {
-	Fields Fields
+	Fields  Fields
+	Details DetailMutations
 }
+
+// DetailMutation describes one explicit child change in a master-detail mutation.
+// An empty ID creates a child; a populated ID updates it; Delete removes it.
+type DetailMutation struct {
+	ID      RecordID
+	Version Version
+	Delete  bool
+	Fields  Fields
+}
+
+// DetailMutations groups explicit child changes by their collection key.
+type DetailMutations map[DetailKey][]DetailMutation
 
 // DeleteMode describes the physical behavior behind the public delete action.
 type DeleteMode string

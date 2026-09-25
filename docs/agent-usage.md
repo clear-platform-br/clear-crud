@@ -74,15 +74,17 @@ Um caso **deve usar `clear-crud`** se todas as respostas forem “sim”:
    necessários, sem código genérico adicional no produto.
 6. A operação não exige documentos, etapas, confirmação humana especial,
    efeito externo, processamento em lote ou coordenação entre recursos como
-   parte da mesma ação.
+   parte da mesma ação — exceto o mestre-detalhe simples de um nível já
+   suportado pela release pública.
 
 Um caso **deve ser escrito como caso de uso/tela própria** se qualquer resposta
 abaixo for “sim”:
 
 1. A ação executa ou confirma efeito externo: envio, pagamento, emissão,
    assinatura, captura ou integração com provedor.
-2. O formulário é mestre-detalhe, multietapa ou tem invariantes transacionais
-   que não cabem nos campos e hooks públicos publicados.
+2. O formulário é mestre-detalhe com árvore, múltiplos níveis, relação muitos
+   para muitos, submissão parcial implícita, multietapa ou tem invariantes
+   transacionais que não cabem nos campos e hooks públicos publicados.
 3. O operador toma decisão de negócio que exige revisão explícita, prova,
    documentos ou aprovação humana.
 4. A experiência principal é operação, painel analítico, linha do tempo,
@@ -146,6 +148,19 @@ Cada cadastro fornece apenas uma definição revisável:
 
 A definição não contém CSS, HTML, componente Vue/React/Flutter, SQL recebido do
 navegador, segredo, tenant livre ou regra de fluxo externo.
+
+### Mestre-detalhe simples, quando a release o oferecer
+
+Use `Details` somente para um registro pai e coleções filhas diretas. Cada
+filho continua sendo um recurso registrado, com seus próprios campos,
+permissões e adapter. A definição do pai informa a coleção, o recurso filho,
+o campo interno de vínculo e os limites mínimo/máximo. O campo de vínculo é
+invisível e somente leitura: o motor o preenche; a tela nunca o envia.
+
+Na mutation, a coleção informa explicitamente cada inclusão, edição versionada
+ou remoção. Pai, filhos e auditoria usam a mesma `UnitOfWork`. Não use esta
+capability para árvore, muitos-para-muitos, filho de filho, upload, documentos,
+workflow ou integração externa.
 
 ### 4. Monte a UI oficial
 

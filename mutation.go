@@ -38,7 +38,7 @@ func normalizeMutationFields(definition Definition, mutation Mutation) (Mutation
 	if len(mutation.Fields) > maxMutationFields {
 		return Mutation{}, invalidMutation(nil)
 	}
-	normalized := Mutation{Fields: make(Fields, len(definition.Fields))}
+	normalized := Mutation{Fields: make(Fields, len(definition.Fields)), Details: cloneDetailMutations(mutation.Details)}
 	for key, value := range mutation.Fields {
 		field, ok := findField(definition.Fields, key)
 		if !ok || field.ReadOnly || !field.Visible {
@@ -66,6 +66,25 @@ func normalizeMutationFields(definition Definition, mutation Mutation) (Mutation
 		}
 	}
 	return normalized, nil
+}
+
+func cloneDetailMutations(details DetailMutations) DetailMutations {
+	if details == nil {
+		return nil
+	}
+	clone := make(DetailMutations, len(details))
+	for key, mutations := range details {
+		clone[key] = make([]DetailMutation, len(mutations))
+		for index, mutation := range mutations {
+			clone[key][index] = DetailMutation{
+				ID:      mutation.ID,
+				Version: mutation.Version,
+				Delete:  mutation.Delete,
+				Fields:  cloneFields(mutation.Fields),
+			}
+		}
+	}
+	return clone
 }
 
 func validateFieldValue(field Field, value Value) error {

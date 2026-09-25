@@ -146,6 +146,19 @@ type DeletePolicy struct {
 	Mode DeleteMode
 }
 
+// DetailDefinition declares one server-registered child collection. ParentField
+// is internal: the service supplies the parent record ID and rejects client input.
+type DetailDefinition struct {
+	Key         DetailKey
+	Resource    ResourceKey
+	ParentField FieldKey
+	Minimum     uint16
+	Maximum     uint16
+	AllowCreate bool
+	AllowUpdate bool
+	AllowDelete bool
+}
+
 // FieldErrors maps a field to a safe, localizable validation message.
 type FieldErrors map[FieldKey]MessageCode
 
@@ -176,6 +189,7 @@ type Definition struct {
 	Scope        ScopeRequirements
 	Permissions  Permissions
 	Fields       []Field
+	Details      []DetailDefinition
 	List         ListDefinition
 	Presentation Presentation
 	Source       DataSource

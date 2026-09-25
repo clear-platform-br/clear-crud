@@ -197,6 +197,38 @@ func TestFullHTTPMatrix(t *testing.T) {
 	}
 }
 
+func TestMutationDetailsUseOnlyDeclaredChildFields(t *testing.T) {
+	definition := crud.PublicDefinition{
+		Fields: []crud.Field{{Key: "name", Type: crud.FieldString}},
+		Details: []crud.PublicDetailDefinition{{
+			Key: "destinations", Maximum: 2,
+			Fields: []crud.Field{{Key: "address", Type: crud.FieldString}, {Key: "priority", Type: crud.FieldInteger}},
+		}},
+	}
+	handler := &Handler{options: Options{MaxBodyBytes: maxJSONBytes}}
+	for _, test := range []struct {
+		name string
+		body string
+		ok   bool
+	}{
+		{"valid", `{"fields":{"name":"Ana"},"details":{"destinations":[{"fields":{"address":"ana@example.com","priority":2}}]}}`, true},
+		{"internal parent link", `{"fields":{"name":"Ana"},"details":{"destinations":[{"fields":{"parent_id":"1"}}]}}`, false},
+		{"unknown collection", `{"fields":{"name":"Ana"},"details":{"other":[{"fields":{}}]}}`, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.body))
+			request.Header.Set("Content-Type", "application/json")
+			mutation, err := handler.mutation(request, definition, false)
+			if (err == nil) != test.ok {
+				t.Fatalf("mutation() = %#v, %v", mutation, err)
+			}
+			if test.ok && mutation.Details["destinations"][0].Fields["priority"] != int64(2) {
+				t.Fatalf("detail integer was not normalized: %#v", mutation)
+			}
+		})
+	}
+}
+
 type source struct {
 	creates int
 	err     error
