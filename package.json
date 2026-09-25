@@ -1,0 +1,22 @@
+{
+  "name": "clear-crud-workspace",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "frontend:build": "tsc -b packages/crud-client/tsconfig.json && vue-tsc --declaration --emitDeclarationOnly -p packages/crud-vue/tsconfig.json && vite build --config packages/crud-vue/vite.config.ts && cp packages/crud-vue/src/theme-default.css packages/crud-vue/dist/theme-default.css",
+    "frontend:test": "vitest run --config packages/crud-vue/vitest.config.ts"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/tsconfig": "^0.9.1",
+    "@vue/test-utils": "^2.4.6",
+    "happy-dom": "^20.0.10",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^4.0.14",
+    "vue": "^3.5.41",
+    "vue-tsc": "^3.3.11"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@clear-platform/crud-vue",
+  "version": "0.2.0-experimental.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs"
+    },
+    "./theme-default.css": "./dist/theme-default.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  },
+  "dependencies": {
+    "@clear-platform/crud-client": "0.2.0-experimental.0"
+  }
+}

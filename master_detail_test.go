@@ -62,6 +62,21 @@ func TestMasterDetailRejectsUnauthorizedChildAndRollsBack(t *testing.T) {
 	}
 }
 
+func TestMasterDetailQualifiesChildValidationErrorsForRenderer(t *testing.T) {
+	service := newMasterDetailService(t, &detailSource{}, &detailSource{}, &transactionUOW{}, &mutationAudit{}, 0, 2, &detailAuthorizer{})
+	_, err := service.Create(context.Background(), "contacts", Mutation{
+		Fields:  Fields{"name": "Ana", "active": true},
+		Details: DetailMutations{"destinations": {{Fields: Fields{"address": ""}}}},
+	})
+	var public *Error
+	if !errors.As(err, &public) || public.Code != ErrorValidationFailed || public.Fields["destinations.address"] == "" {
+		t.Fatalf("Create() child validation error = %#v, want qualified destination field", public)
+	}
+	if _, leaked := public.Fields["address"]; leaked {
+		t.Fatalf("child validation error must not use ambiguous field key: %#v", public.Fields)
+	}
+}
+
 func TestMasterDetailEnforcesMinimumAndLoadsDetailsOnGet(t *testing.T) {
 	parentSource := &detailSource{
 		created: Record{ID: "contact-1", Version: 1, Fields: Fields{"name": "Ana", "active": true}},
@@ -163,7 +178,7 @@ func TestMasterDetailDefinitionExposesOnlyAuthorizedVisibleChildMetadata(t *test
 		t.Fatalf("Definition() = %#v, %v", definition, err)
 	}
 	detail := definition.Details[0]
-	if !detail.AllowCreate || !detail.AllowUpdate || !detail.AllowDelete || len(detail.Fields) != 1 || detail.Fields[0].Key != "address" {
+	if definition.Delete.Mode != DeleteModeArchive || detail.Labels.Title != "crud.contact_categories.title" || !detail.AllowCreate || !detail.AllowUpdate || !detail.AllowDelete || len(detail.Fields) != 1 || detail.Fields[0].Key != "address" {
 		t.Fatalf("public detail = %#v", detail)
 	}
 

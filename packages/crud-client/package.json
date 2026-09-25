@@ -1,0 +1,14 @@
+{
+  "name": "@clear-platform/crud-client",
+  "version": "0.2.0-experimental.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ]
+}

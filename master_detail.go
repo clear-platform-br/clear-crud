@@ -2,6 +2,7 @@ package crud
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
 
@@ -126,7 +127,7 @@ func (service *Service) normalizeDetailChanges(ctx context.Context, state readSt
 		for _, mutation := range mutations {
 			change, err := normalizeDetailChange(ctx, state.scope, detail, child, mutation)
 			if err != nil {
-				return nil, err
+				return nil, detailError(detail, err)
 			}
 			changes = append(changes, change)
 		}
@@ -183,7 +184,7 @@ func (service *Service) applyDetailChanges(ctx context.Context, parent readState
 			}
 			record, err := change.child.Source.Create(ctx, childState.scope, mutation)
 			if err != nil {
-				return nil, unavailable(err)
+				return nil, detailError(change.definition, unavailable(err))
 			}
 			if err := service.audit.Append(ctx, service.auditEvent(childState, ActionCreate, record.ID, 0, record.Version)); err != nil {
 				return nil, unavailable(err)
@@ -211,7 +212,7 @@ func (service *Service) applyDetailChanges(ctx context.Context, parent readState
 				}
 				record, err := change.child.Source.Update(ctx, childState.scope, change.id, change.version, mutation)
 				if err != nil {
-					return nil, unavailable(err)
+					return nil, detailError(change.definition, unavailable(err))
 				}
 				if err := service.audit.Append(ctx, service.auditEvent(childState, ActionUpdate, change.id, change.version, record.Version)); err != nil {
 					return nil, unavailable(err)
@@ -243,6 +244,18 @@ func (service *Service) applyDetailChanges(ctx context.Context, parent readState
 func belongsToParent(record Record, field FieldKey, parentID RecordID) bool {
 	value, ok := record.Fields[field]
 	return ok && fmt.Sprint(value) == string(parentID)
+}
+
+func detailError(detail DetailDefinition, err error) error {
+	var public *Error
+	if !errors.As(err, &public) || public.Code != ErrorValidationFailed || len(public.Fields) == 0 {
+		return err
+	}
+	fields := make(FieldErrors, len(public.Fields))
+	for key, message := range public.Fields {
+		fields[FieldKey(string(detail.Key)+"."+string(key))] = message
+	}
+	return &Error{Code: public.Code, Message: public.Message, Fields: fields, Cause: public.Cause}
 }
 
 func (service *Service) loadDetails(ctx context.Context, state readState, parentID RecordID) (DetailRecords, error) {

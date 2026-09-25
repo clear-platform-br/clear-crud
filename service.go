@@ -38,6 +38,7 @@ type PublicDefinition struct {
 	List         ListDefinition
 	Presentation Presentation
 	Actions      []Action
+	Delete       DeletePolicy
 }
 
 // NewService validates the host ports once during startup.
@@ -131,6 +132,7 @@ func validateTrustedScope(requirements ScopeRequirements, scope Scope) error {
 type PublicDetailDefinition struct {
 	Key         DetailKey
 	Resource    ResourceKey
+	Labels      Labels
 	Fields      []Field
 	Minimum     uint16
 	Maximum     uint16
@@ -145,6 +147,7 @@ func publicDefinition(ctx context.Context, state readState, authorizer Authorize
 		Labels:       state.definition.Labels,
 		List:         cloneDefinition(state.definition).List,
 		Presentation: state.definition.Presentation,
+		Delete:       state.definition.Delete,
 	}
 	for _, field := range state.definition.Fields {
 		if field.Visible {
@@ -162,7 +165,7 @@ func publicDefinition(ctx context.Context, state readState, authorizer Authorize
 		if !ok || authorizer.Authorize(ctx, state.principal, child.Key, ActionRead, nil) != nil {
 			continue
 		}
-		public := PublicDetailDefinition{Key: detail.Key, Resource: detail.Resource, Minimum: detail.Minimum, Maximum: detail.Maximum}
+		public := PublicDetailDefinition{Key: detail.Key, Resource: detail.Resource, Labels: child.Labels, Minimum: detail.Minimum, Maximum: detail.Maximum}
 		for _, field := range child.Fields {
 			if field.Key != detail.ParentField && field.Visible {
 				public.Fields = append(public.Fields, field)

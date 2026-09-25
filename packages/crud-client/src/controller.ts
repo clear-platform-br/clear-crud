@@ -1,0 +1,124 @@
+import { CrudRequestError } from './http.js'
+import type { CrudFeedback, CrudRecord, CrudState, CrudTransport, DetailMutation, EditorDraft, LookupOption, Mutation, PublicDefinition, Value } from './types.js'
+
+export class CrudController {
+  private state: CrudState = { phase: 'idle', query: { search: '', page: 1, size: 25 } }
+  private listeners = new Set<(state: CrudState) => void>()
+  private request?: AbortController
+
+  constructor(readonly resource: string, private readonly transport: CrudTransport) {}
+
+  snapshot(): CrudState { return structuredClone(this.state) }
+  subscribe(listener: (state: CrudState) => void): () => void { this.listeners.add(listener); listener(this.snapshot()); return () => this.listeners.delete(listener) }
+
+  async load(): Promise<void> {
+    const request = this.beginRequest()
+    this.patch({ phase: 'loading', feedback: undefined })
+    try {
+      const definition = this.state.definition ?? await this.transport.definition(this.resource, request.signal)
+      const page = await this.transport.list(this.resource, this.state.query, request.signal)
+      if (this.request !== request) return
+      this.patch({ definition, page, phase: page.records.length ? 'ready' : 'empty' })
+    } catch (error) { if (this.request === request) this.handleError(error) } finally { this.completeRequest(request) }
+  }
+
+  async search(search: string): Promise<void> { this.patch({ query: { ...this.state.query, search, page: 1 } }); await this.load() }
+  async goTo(page: number): Promise<void> { this.patch({ query: { ...this.state.query, page } }); await this.load() }
+  async setPageSize(size: number): Promise<void> { this.patch({ query: { ...this.state.query, size, page: 1 } }); await this.load() }
+
+  beginCreate(): void {
+    const definition = this.requireDefinition()
+    this.patch({ phase: 'editing', editor: { fields: blankFields(definition.Fields), details: blankDetails(definition) }, feedback: undefined })
+  }
+
+  async beginEdit(record: CrudRecord): Promise<void> {
+    const request = this.beginRequest()
+    this.patch({ phase: 'loading', feedback: undefined })
+    try {
+      const full = await this.transport.get(this.resource, record.ID, request.signal)
+      if (this.request !== request) return
+      this.patch({ phase: 'editing', editor: recordToDraft(full, this.requireDefinition()), feedback: undefined })
+    } catch (error) { if (this.request === request) this.handleError(error) } finally { this.completeRequest(request) }
+  }
+
+  cancelEdit(): void { this.patch({ phase: this.state.page?.records.length ? 'ready' : 'empty', editor: undefined }) }
+  updateField(key: string, value: Value): void { if (this.state.editor) this.patch({ editor: { ...this.state.editor, fields: { ...this.state.editor.fields, [key]: value } } }) }
+  updateDetail(key: string, index: number, field: string, value: Value): void {
+    const editor = this.requireEditor(); const rows = [...(editor.details[key] ?? [])]; rows[index] = { ...rows[index], fields: { ...rows[index].fields, [field]: value } }; this.patch({ editor: { ...editor, details: { ...editor.details, [key]: rows } } })
+  }
+  addDetail(key: string): void { const editor = this.requireEditor(); const detail = this.requireDefinition().Details.find((item) => item.Key === key); if (!detail || editor.details[key].filter((row) => !row.delete).length >= detail.Maximum) return; this.patch({ editor: { ...editor, details: { ...editor.details, [key]: [...editor.details[key], { fields: blankFields(detail.Fields) }] } } }) }
+  removeDetail(key: string, index: number): void { const editor = this.requireEditor(); const rows = [...editor.details[key]]; const row = rows[index]; if (!row.id) rows.splice(index, 1); else rows[index] = { ...row, delete: true }; this.patch({ editor: { ...editor, details: { ...editor.details, [key]: rows } } }) }
+
+  async submit(): Promise<void> {
+    const editor = this.requireEditor()
+    const localErrors = validateDraft(this.requireDefinition(), editor)
+    if (Object.keys(localErrors).length) { this.patch({ phase: 'validation_error', feedback: { kind: 'error', message: 'crud.ui.validation', fields: localErrors } }); return }
+    const request = this.beginRequest(); this.patch({ phase: 'submitting', feedback: undefined })
+    try {
+      const mutation: Mutation = { fields: editor.fields, details: editor.details }
+      const record = editor.id ? await this.transport.update(this.resource, editor.id, editor.version ?? 0, mutation, request.signal) : await this.transport.create(this.resource, mutation, request.signal)
+      if (this.request !== request) return
+      this.patch({ phase: 'success', editor: undefined, feedback: { kind: 'success', message: 'crud.ui.saved' } })
+      await this.load()
+      this.patch({ feedback: { kind: 'success', message: 'crud.ui.saved' }, page: replaceRecord(this.state.page, record) })
+    } catch (error) { if (this.request === request) this.handleError(error) } finally { this.completeRequest(request) }
+  }
+
+  requestDelete(record: CrudRecord): void { this.patch({ pendingDelete: record, feedback: undefined }) }
+  cancelDelete(): void { this.patch({ pendingDelete: undefined }) }
+  async confirmDelete(): Promise<void> {
+    const record = this.state.pendingDelete
+    if (!record) return
+    const request = this.beginRequest(); this.patch({ phase: 'submitting', feedback: undefined })
+    try {
+      await this.transport.delete(this.resource, record.ID, record.Version, request.signal)
+      if (this.request !== request) return
+      this.patch({ pendingDelete: undefined, feedback: { kind: 'success', message: 'crud.ui.removed' } })
+      await this.load()
+    } catch (error) { if (this.request === request) this.handleError(error) } finally { this.completeRequest(request) }
+  }
+
+  async lookup(resource: string, field: string, search: string): Promise<LookupOption[]> { return this.transport.lookup(resource, field, search) }
+  dismissFeedback(): void { this.patch({ feedback: undefined }) }
+
+  private patch(change: Partial<CrudState>): void { this.state = { ...this.state, ...change }; for (const listener of this.listeners) listener(this.snapshot()) }
+  private beginRequest(): AbortController { this.abortActiveRequest(); const request = new AbortController(); this.request = request; return request }
+  private completeRequest(request: AbortController): void { if (this.request === request) this.request = undefined }
+  private abortActiveRequest(): void { this.request?.abort(); this.request = undefined }
+  private requireDefinition(): PublicDefinition { if (!this.state.definition) throw new Error('CRUD definition is unavailable'); return this.state.definition }
+  private requireEditor(): EditorDraft { if (!this.state.editor) throw new Error('CRUD editor is unavailable'); return this.state.editor }
+  private handleError(error: unknown): void {
+    if (error instanceof DOMException && error.name === 'AbortError') return
+    const request = error instanceof CrudRequestError ? error : new CrudRequestError('temporarily_unavailable', 'crud.ui.unavailable')
+    const phase = request.code === 'validation_failed' ? 'validation_error' : request.code === 'conflict' ? 'conflict' : 'recoverable_error'
+    this.patch({ phase, feedback: { kind: phase === 'conflict' ? 'conflict' : 'error', message: request.message, fields: request.fields } })
+  }
+}
+
+function blankFields(fields: PublicDefinition['Fields']): Record<string, Value> { return Object.fromEntries(fields.filter((field) => !field.ReadOnly).map((field) => [field.Key, field.Type === 'boolean' ? false : null])) }
+function blankDetails(definition: PublicDefinition): Record<string, DetailMutation[]> { return Object.fromEntries(definition.Details.map((detail) => [detail.Key, []])) }
+function recordToDraft(record: CrudRecord, definition: PublicDefinition): EditorDraft { return { id: record.ID, version: record.Version, fields: { ...blankFields(definition.Fields), ...record.Fields }, details: Object.fromEntries(definition.Details.map((detail) => [detail.Key, (record.Details?.[detail.Key] ?? []).map((child) => ({ id: child.ID, version: child.Version, fields: { ...blankFields(detail.Fields), ...child.Fields } }))])) } }
+function validateDraft(definition: PublicDefinition, draft: EditorDraft): Record<string, string> {
+  const errors: Record<string, string> = {}
+  for (const field of definition.Fields) validateField(errors, field.Key, field, draft.fields[field.Key])
+  for (const detail of definition.Details) {
+    const rows = draft.details[detail.Key] ?? []
+    const count = rows.filter((row) => !row.delete).length
+    if (count < detail.Minimum || count > detail.Maximum) errors[detail.Key] = 'crud.detail.cardinality'
+    for (const row of rows) for (const field of detail.Fields) if (!row.delete) validateField(errors, `${detail.Key}.${field.Key}`, field, row.fields[field.Key])
+  }
+  return errors
+}
+function validateField(errors: Record<string, string>, key: string, field: PublicDefinition['Fields'][number], value: Value | undefined): void {
+  if (field.ReadOnly || empty(value)) { if (field.Required && !field.ReadOnly) errors[key] = 'crud.field.required'; return }
+  const text = String(value)
+  if (field.Type === 'integer' && (!Number.isInteger(value) || Number.isNaN(value))) errors[key] = 'crud.field.invalid'
+  if (field.Type === 'email' && (typeof value !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))) errors[key] = 'crud.field.invalid'
+  if ((field.MinLength !== undefined && text.length < field.MinLength) || (field.MaxLength !== undefined && text.length > field.MaxLength)) errors[key] = 'crud.field.length'
+  if (field.Minimum !== undefined || field.Maximum !== undefined) {
+    const numeric = Number(value)
+    if (Number.isNaN(numeric) || (field.Minimum !== undefined && numeric < Number(field.Minimum)) || (field.Maximum !== undefined && numeric > Number(field.Maximum))) errors[key] = 'crud.field.range'
+  }
+}
+function empty(value: Value | undefined): boolean { return value === null || value === undefined || value === '' }
+function replaceRecord(page: CrudState['page'], record: CrudRecord): CrudState['page'] { return page ? { ...page, records: page.records.map((item) => item.ID === record.ID ? record : item) } : page }

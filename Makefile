@@ -1,9 +1,9 @@
-.PHONY: validate test coverage security
+.PHONY: validate test coverage security frontend
 
 COVERAGE_MIN ?= 90
 COVERAGE_FILE := /private/tmp/clear-crud-coverage.out
 
-validate: test coverage security
+validate: test coverage security frontend
 
 test:
 	GOCACHE=/private/tmp/clear-crud-gocache go build ./...
@@ -19,3 +19,8 @@ coverage:
 security:
 	@command -v govulncheck >/dev/null || { echo "govulncheck is required; install golang.org/x/vuln/cmd/govulncheck@latest"; exit 1; }
 	GOCACHE=/private/tmp/clear-crud-gocache govulncheck ./...
+
+frontend:
+	npm_config_cache="$(CURDIR)/work/npm-cache" npm ci
+	npm_config_cache="$(CURDIR)/work/npm-cache" npm run frontend:build
+	npm_config_cache="$(CURDIR)/work/npm-cache" npm run frontend:test

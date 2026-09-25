@@ -117,6 +117,13 @@ Decisão `clear-crud` sem release, adapter e renderer públicos identificados é
 inválida. A ação correta é parar e abrir uma lacuna no repositório proprietário;
 nunca construir equivalentes no produto.
 
+Para Vue, o repositório contém os pacotes experimentais
+`@clear-platform/crud-client` e `@clear-platform/crud-vue`. O produto importa
+`CrudScreen` somente após a publicação da release, passa a chave do recurso, client HTTP fechado e tradução,
+e pode importar o tema padrão ou sobrescrever seus tokens. Veja
+[`renderer-vue.md`](renderer-vue.md). Não implemente variações locais do
+controller, da tabela ou do formulário.
+
 ## Como usar `clear-crud`
 
 ### 1. Escolha e fixe uma release pública
