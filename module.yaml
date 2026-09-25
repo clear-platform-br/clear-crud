@@ -1,8 +1,8 @@
 manifest_version: "clear.module.v1"
 module_id: "clear.crud"
-module_version: "0.1.0-dev.1"
+module_version: "0.1.0"
 capability_class: "shared-capability"
-lifecycle: "proposed"
+lifecycle: "implemented"
 owner:
   repository: "clear-platform-br/clear-crud"
   contact: "github:clear-platform-br/clear-crud"

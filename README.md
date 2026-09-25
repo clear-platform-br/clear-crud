@@ -4,9 +4,9 @@
 administrativos simples, orientados por definição e sem acoplamento a domínio,
 banco ou frontend.
 
-O módulo está em desenvolvimento e ainda não possui release estável. O primeiro
-piloto será executado no Aztheca Lab, mas o módulo não conhece condomínio,
-boleto, contato ou qualquer vocabulário do laboratório.
+O módulo está em sua primeira release pública (`v0.1.0`). O primeiro piloto
+será executado no Aztheca Lab, mas o módulo não conhece condomínio, boleto,
+contato ou qualquer vocabulário do laboratório.
 
 ## O que este módulo fará
 
