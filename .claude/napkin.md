@@ -22,3 +22,5 @@
 
 1. **[2026-09-25] The standard renderer owns transport state and request concurrency.**
    Do instead: mount `CrudScreen` with the public client; product components provide only route context, theme and message resolution, never parallel CRUD fetching or mutation state.
+2. **[2026-09-25] Frontend packages are release artifacts, not merely source folders.**
+   Do instead: clean generated output, emit declarations, build the bundle and run `npm pack --dry-run` in every validation gate.

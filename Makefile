@@ -24,3 +24,4 @@ frontend:
 	npm_config_cache="$(CURDIR)/work/npm-cache" npm ci
 	npm_config_cache="$(CURDIR)/work/npm-cache" npm run frontend:build
 	npm_config_cache="$(CURDIR)/work/npm-cache" npm run frontend:test
+	npm_config_cache="$(CURDIR)/work/npm-cache" npm run frontend:pack
