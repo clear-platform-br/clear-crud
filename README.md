@@ -8,6 +8,10 @@ O módulo está em sua primeira release pública (`v0.1.0`). O primeiro piloto
 será executado no Aztheca Lab, mas o módulo não conhece condomínio, boleto,
 contato ou qualquer vocabulário do laboratório.
 
+Agentes e consumidores devem seguir o [manual de uso](docs/agent-usage.md)
+antes de iniciar um CRUD: ele define o critério objetivo para usar o motor ou
+escrever um caso de uso próprio, sem duplicar a capability no produto.
+
 ## O que este módulo fará
 
 - registrar recursos fechados no servidor;
