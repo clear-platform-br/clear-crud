@@ -75,6 +75,13 @@ Funcionalidade: fundação pública do Clear CRUD
     Então a operação retorna indisponibilidade temporária sem detalhe técnico
     E o hook posterior não é executado
 
+  Cenário: adapter SQL confirma auditoria junto da mutação
+    Dado um simple_table e um sqladapter.AuditSink no mesmo banco
+    Quando uma mutação e seu evento de auditoria são aceitos
+    Então ambos usam a transação aberta pelo simple_table
+    E uma falha ao inserir o evento desfaz a mutação
+    E o evento contém apenas metadados redigidos e correlation ID
+
   Cenário: adapter declarado conforme não atravessa o escopo
     Dado um adapter real exercitado pela suíte pública de conformidade
     Quando um registro criado no tenant A é buscado pelo tenant B
