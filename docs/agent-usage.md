@@ -8,6 +8,35 @@ Fonte dos contratos: `clear_platform` (`clear.crud.definition.v1`,
 `clear.crud.datasource.v1`, `clear.crud.http.v1` e
 `clear.crud.renderer.v1`). Este documento ensina o uso; não altera contratos.
 
+## Princípio de evolução: defaults primeiro
+
+O objetivo da capability é que o caso comum seja resolvido por convenção, com
+uma entrada equivalente a:
+
+```go
+crud.Auto("contact_records")
+```
+
+O motor deve descobrir campos, tipos, chave, busca, ordenação, paginação,
+lookups, grade, formulário e ações padrão a partir dos metadados do adapter.
+O agente só acrescenta diretivas quando houver uma exceção: esconder uma
+coluna, trocar rótulo, restringir campos graváveis, declarar validação de
+domínio ou resolver uma relação ambígua.
+
+Até essa API estar publicada em uma release consumível, não simule o recurso no
+produto com um CRUD local. Registre a lacuna no `clear-crud` e use a definição
+explícita existente apenas como etapa intermediária.
+
+A configuração automática nunca decide silenciosamente segurança. O host deve
+resolver, por perfil, os gates `open`, `read`, `write`, `soft_delete` e
+`hard_delete`. O renderer omite ações não autorizadas, mas o backend sempre
+revalida cada gate.
+
+Para o caso convencional, a consulta da grade e a consulta do formulário são
+distintas: a primeira retorna só colunas úteis para localizar o registro; a
+segunda roda após a seleção e retorna os campos permitidos para edição. SQL
+customizado, quando necessário, permanece fechado no servidor.
+
 ## Regra de 30 segundos — use esta primeiro
 
 Responda às três perguntas, nesta ordem:
