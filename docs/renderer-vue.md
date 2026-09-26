@@ -52,6 +52,19 @@ Importar `theme-default.css` é opcional. Produtos podem sobrescrever apenas as
 custom properties `--clear-crud-*` ou fornecer tema integral; não devem mudar
 a semântica do controller nem enviar estilos pela definição do backend.
 
+## Galeria de temas planejada
+
+O renderer terá exemplos visuais para demonstrar o esforço de customização:
+
+1. tokens: cores, tipografia e espaçamento;
+2. tema CSS completo usando os mesmos componentes;
+3. composição por partes registradas;
+4. renderer próprio usando o mesmo client e contrato.
+
+Os exemplos devem passar as mesmas fixtures e cenários comportamentais. O
+futuro `GoDataGrid` seguirá a mesma separação entre semântica estável e tema,
+para que a aparência possa mudar sem duplicar persistência ou regras CRUD.
+
 ## Estado de entrega
 
 Este renderer é `experimental`. O código está pronto para o piloto Vue, mas um
