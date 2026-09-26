@@ -14,6 +14,9 @@ mesma revisão deve passar:
 5. publicação dos dois pacotes com a mesma versão e, somente depois, tag Git e
    release GitHub correspondente.
 
+Versões pré-release, como `0.2.0-experimental.0`, são publicadas na tag npm
+`experimental`; elas nunca substituem a tag `latest` de uma versão estável.
+
 O workflow usa `GITHUB_TOKEN`; nenhum token é gravado no repositório. Até a
 publicação, um produto consumidor não usa caminho local, `replace`, cópia, fork
 ou `vendor`.
