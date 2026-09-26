@@ -12,7 +12,11 @@ import (
 const maxMutationFields = 100
 
 func normalizeMutation(ctx context.Context, scope Scope, definition Definition, mutation Mutation) (Mutation, error) {
-	normalized, err := normalizeMutationFields(definition, mutation)
+	return normalizeMutationForAction(ctx, scope, definition, ActionCreate, mutation)
+}
+
+func normalizeMutationForAction(ctx context.Context, scope Scope, definition Definition, action Action, mutation Mutation) (Mutation, error) {
+	normalized, err := normalizeMutationFields(definition, action, mutation)
 	if err != nil {
 		return Mutation{}, err
 	}
@@ -21,7 +25,7 @@ func normalizeMutation(ctx context.Context, scope Scope, definition Definition, 
 		if err != nil {
 			return Mutation{}, unavailable(err)
 		}
-		normalized, err = normalizeMutationFields(definition, normalized)
+		normalized, err = normalizeMutationFields(definition, action, normalized)
 		if err != nil {
 			return Mutation{}, err
 		}
@@ -34,14 +38,14 @@ func normalizeMutation(ctx context.Context, scope Scope, definition Definition, 
 	return normalized, nil
 }
 
-func normalizeMutationFields(definition Definition, mutation Mutation) (Mutation, error) {
+func normalizeMutationFields(definition Definition, action Action, mutation Mutation) (Mutation, error) {
 	if len(mutation.Fields) > maxMutationFields {
 		return Mutation{}, invalidMutation(nil)
 	}
 	normalized := Mutation{Fields: make(Fields, len(definition.Fields)), Details: cloneDetailMutations(mutation.Details)}
 	for key, value := range mutation.Fields {
 		field, ok := findField(definition.Fields, key)
-		if !ok || field.ReadOnly || !field.Visible {
+		if !ok || field.ReadOnly || !field.Visible || field.CreateOnly && action != ActionCreate {
 			return Mutation{}, invalidMutation(nil)
 		}
 		if err := validateFieldValue(field, value); err != nil {
@@ -50,7 +54,7 @@ func normalizeMutationFields(definition Definition, mutation Mutation) (Mutation
 		normalized.Fields[key] = value
 	}
 	for _, field := range definition.Fields {
-		if field.ReadOnly || !field.Visible {
+		if field.ReadOnly || !field.Visible || field.CreateOnly && action != ActionCreate {
 			continue
 		}
 		value, exists := normalized.Fields[field.Key]

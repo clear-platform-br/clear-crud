@@ -26,4 +26,11 @@ describe('CrudEditor', () => {
     const wrapper = mount(CrudEditor, { props: { definition, editor: draft, feedback: { kind: 'error', message: 'crud.ui.validation', fields: { 'destinations.address': 'crud.field.invalid' } }, messages: ptBR, translate: createTranslator(ptBR), submitting: false, lookup: async () => [] } })
     expect(wrapper.get('[data-clear-crud-detail="destinations"] .crud-field-error').text()).toBe('Valor inválido.')
   })
+
+  it('disables a create-only field while editing', () => {
+    const editingDefinition: PublicDefinition = { ...definition, Fields: [...definition.Fields, { Key: 'apartment', Label: 'contacts.apartment', Type: 'string', Required: true, ReadOnly: false, CreateOnly: true, Visible: true, Sensitive: false }] }
+    const editing: EditorDraft = { id: '1', version: 1, fields: { name: 'Ana', apartment: '64' }, details: { destinations: [] } }
+    const wrapper = mount(CrudEditor, { props: { definition: editingDefinition, editor: editing, messages: ptBR, translate: createTranslator(ptBR), submitting: false, lookup: async () => [] } })
+    expect(wrapper.get('[data-clear-crud-field="apartment"] input').attributes('disabled')).toBeDefined()
+  })
 })

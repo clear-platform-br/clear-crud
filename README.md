@@ -50,7 +50,9 @@ versão e só então é implementada neste módulo.
 - PRs 1 a 5: tipos públicos, definições lacradas, serviço com autorização e
   escopo, mutações transacionais auditáveis e suíte de conformidade pública.
 - PR 6: `sqladapter.SimpleTable` executa a conformidade contra SQLite real,
-  sem importar driver no código publicado.
+  sem importar driver no código publicado. Ele aceita ID gerado pelo banco ou
+  identidade escalar `create_only`, estado de archive explícito e colunas
+  técnicas preenchidas a partir de escopo confiável ou UTC do servidor.
 - Renderer experimental: `@clear-platform-br/crud-client` concentra transporte,
   estado e mutations; `@clear-platform-br/crud-vue` entrega a tela Vue 3 padrão,
   inclusive mestre-detalhe de um nível. Veja o [guia do renderer Vue](docs/renderer-vue.md).

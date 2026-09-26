@@ -156,6 +156,12 @@ Cada cadastro fornece apenas uma definição revisável:
 A definição não contém CSS, HTML, componente Vue/React/Flutter, SQL recebido do
 navegador, segredo, tenant livre ou regra de fluxo externo.
 
+Use `create_only` para uma chave de negócio informada ao incluir e nunca
+alterada depois (por exemplo, número de apartamento). O renderer a mantém
+visível e desabilitada na edição; o backend a recusa em `update`. A identidade
+técnica do registro continua opaca e é configurada somente no adapter
+registrado pelo servidor.
+
 ### Mestre-detalhe simples, quando a release o oferecer
 
 Use `Details` somente para um registro pai e coleções filhas diretas. Cada

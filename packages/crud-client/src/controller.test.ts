@@ -19,7 +19,7 @@ function transport(): CrudTransport & { mutations: Mutation[] } {
     list: async () => ({ records: [], page: 1, size: 25, total: 0 }),
     get: async () => ({ ID: '1', Version: 1, Fields: { name: 'Ana' }, Details: { destinations: [] } }),
     create: async (_resource, mutation) => { mutations.push(mutation); return { ID: '1', Version: 1, Fields: mutation.fields } },
-    update: async (_resource, id, version, mutation) => ({ ID: id, Version: version + 1, Fields: mutation.fields }),
+    update: async (_resource, id, version, mutation) => { mutations.push(mutation); return { ID: id, Version: version + 1, Fields: mutation.fields } },
     delete: async () => undefined,
     lookup: async () => [],
   }
@@ -60,6 +60,28 @@ describe('CrudController', () => {
     await controller.submit()
     expect(client.mutations).toEqual([])
     expect(controller.snapshot().feedback?.fields).toMatchObject({ 'destinations.address': 'crud.field.invalid' })
+  })
+
+  it('submits a create-only identity on create and omits it on update', async () => {
+    const client = transport()
+    const resourceDefinition: PublicDefinition = { ...definition, Fields: [...definition.Fields, { Key: 'apartment', Label: 'contacts.apartment', Type: 'string', Required: true, ReadOnly: false, CreateOnly: true, Visible: true, Sensitive: false }], Details: definition.Details.map((detail) => ({ ...detail, Minimum: 0 })) }
+    client.definition = async () => resourceDefinition
+    client.get = async () => ({ ID: '1', Version: 1, Fields: { name: 'Ana', apartment: '64' }, Details: { destinations: [] } })
+    const controller = new CrudController('contacts', client)
+    await controller.load()
+    controller.beginCreate()
+    controller.updateField('name', 'Ana')
+    controller.updateField('apartment', '64')
+    controller.addDetail('destinations')
+    controller.updateDetail('destinations', 0, 'address', 'ana@example.com')
+    await controller.submit()
+    await controller.beginEdit({ ID: '1', Version: 1, Fields: { name: 'Ana' } })
+    controller.updateField('name', 'Ana Maria')
+    await controller.submit()
+    expect(client.mutations).toEqual([
+      { fields: { name: 'Ana', apartment: '64' }, details: { destinations: [{ fields: { address: 'ana@example.com' } }] } },
+      { fields: { name: 'Ana Maria' }, details: { destinations: [] } },
+    ])
   })
 
   it('maps server failures to a recoverable public state', async () => {

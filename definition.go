@@ -49,20 +49,23 @@ type LookupDefinition struct {
 
 // Field describes a resource field without exposing physical storage details.
 type Field struct {
-	Key       FieldKey
-	Label     MessageCode
-	Help      MessageCode
-	Type      FieldType
-	Required  bool
-	ReadOnly  bool
-	Visible   bool
-	Sensitive bool
-	MinLength int
-	MaxLength int
-	Minimum   string
-	Maximum   string
-	Enum      []Option
-	Lookup    *LookupDefinition
+	Key      FieldKey
+	Label    MessageCode
+	Help     MessageCode
+	Type     FieldType
+	Required bool
+	ReadOnly bool
+	// CreateOnly accepts a value on create and preserves it on update. It is
+	// useful for immutable business keys such as an apartment number.
+	CreateOnly bool
+	Visible    bool
+	Sensitive  bool
+	MinLength  int
+	MaxLength  int
+	Minimum    string
+	Maximum    string
+	Enum       []Option
+	Lookup     *LookupDefinition
 }
 
 // PageMode determines how a resource pages its result set.

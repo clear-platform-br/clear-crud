@@ -44,6 +44,76 @@ func TestNewSimpleTableRejectsInvalidConfig(t *testing.T) {
 	if _, err := NewSimpleTable(database, bad); err == nil {
 		t.Fatal("missing fields accepted")
 	}
+	bad = sqliteTable()
+	bad.IDField = "name"
+	if _, err := NewSimpleTable(database, bad); err == nil {
+		t.Fatal("id field mapped to another column accepted")
+	}
+	bad = sqliteTable()
+	bad.ArchiveState = &ArchiveState{Column: mustIdentifier("archived"), ActiveValue: "active", ArchivedValue: "archived"}
+	if _, err := NewSimpleTable(database, bad); err == nil {
+		t.Fatal("two archive mappings accepted")
+	}
+}
+
+func TestSimpleTableSupportsDeclaredIdentityStateArchiveAndManagedColumns(t *testing.T) {
+	database, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	database.SetMaxOpenConns(1)
+	if _, err = database.Exec(`CREATE TABLE contacts (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        updated_by TEXT NOT NULL
+    )`); err != nil {
+		t.Fatal(err)
+	}
+	source, err := NewSimpleTable(database, TableDefinition{
+		Table: mustIdentifier("contacts"), IDColumn: mustIdentifier("id"), IDField: "code", VersionColumn: mustIdentifier("version"),
+		ScopeColumns: map[string]Identifier{"tenant_id": mustIdentifier("tenant_id")},
+		ArchiveState: &ArchiveState{Column: mustIdentifier("status"), ActiveValue: "active", ArchivedValue: "archived"},
+		Managed: []ManagedColumn{
+			{Column: mustIdentifier("created_at"), OnCreate: ManagedUTCNow()},
+			{Column: mustIdentifier("created_by"), OnCreate: ManagedFromScope("actor_id")},
+			{Column: mustIdentifier("updated_at"), OnCreate: ManagedUTCNow(), OnUpdate: ManagedUTCNow()},
+			{Column: mustIdentifier("updated_by"), OnCreate: ManagedFromScope("actor_id"), OnUpdate: ManagedFromScope("actor_id")},
+		},
+		Fields: map[crud.FieldKey]Identifier{"code": mustIdentifier("id"), "name": mustIdentifier("name")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := crud.Scope{"tenant_id": "tenant-a", "actor_id": "operator-a"}
+	created, err := source.Create(context.Background(), scope, crud.Mutation{Fields: crud.Fields{"code": "contact-64", "name": "Ana"}})
+	if err != nil || created.ID != "contact-64" || created.Fields["code"] != "contact-64" {
+		t.Fatalf("Create() = %#v, %v", created, err)
+	}
+	updated, err := source.Update(context.Background(), scope, created.ID, created.Version, crud.Mutation{Fields: crud.Fields{"name": "Ana Maria"}})
+	if err != nil || updated.Version != 2 || updated.Fields["code"] != "contact-64" {
+		t.Fatalf("Update() = %#v, %v", updated, err)
+	}
+	if err := source.Delete(context.Background(), scope, created.ID, updated.Version, crud.DeleteModeArchive); err != nil {
+		t.Fatal(err)
+	}
+	var status, createdBy, updatedBy, createdAt, updatedAt string
+	if err := database.QueryRow(`SELECT status, created_by, updated_by, created_at, updated_at FROM contacts WHERE id='contact-64'`).Scan(&status, &createdBy, &updatedBy, &createdAt, &updatedAt); err != nil {
+		t.Fatal(err)
+	}
+	if status != "archived" || createdBy != "operator-a" || updatedBy != "operator-a" || createdAt == "" || updatedAt == "" {
+		t.Fatalf("technical columns = status:%q createdBy:%q updatedBy:%q createdAt:%q updatedAt:%q", status, createdBy, updatedBy, createdAt, updatedAt)
+	}
+	_, err = source.Get(context.Background(), scope, created.ID)
+	requireCode(t, err, crud.ErrorNotFound)
+	_, err = source.Create(context.Background(), crud.Scope{"tenant_id": "tenant-a"}, crud.Mutation{Fields: crud.Fields{"code": "contact-65", "name": "Bia"}})
+	requireCode(t, err, crud.ErrorForbidden)
 }
 
 func TestSimpleTableQueryAndPolicies(t *testing.T) {

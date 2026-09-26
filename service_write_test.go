@@ -27,7 +27,7 @@ func TestServiceCreateWritesAuditInTheSameUnitOfWork(t *testing.T) {
 		}
 	})
 
-	record, err := service.Create(context.Background(), "contact_categories", Mutation{Fields: Fields{"name": "Ana", "active": true}})
+	record, err := service.Create(WithCorrelationID(context.Background(), "correlation-1"), "contact_categories", Mutation{Fields: Fields{"name": "Ana", "active": true}})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -35,7 +35,7 @@ func TestServiceCreateWritesAuditInTheSameUnitOfWork(t *testing.T) {
 		t.Fatalf("Create() did not complete atomically: %#v %#v", source, audit)
 	}
 	event := audit.events[0]
-	if event.Action != ActionCreate || event.BeforeVersion != 0 || event.AfterVersion != 1 || event.Scope["tenant_id"] != "tenant-a" {
+	if event.Action != ActionCreate || event.BeforeVersion != 0 || event.AfterVersion != 1 || event.Scope["tenant_id"] != "tenant-a" || event.CorrelationID != "correlation-1" {
 		t.Fatalf("create audit event = %#v", event)
 	}
 	if !source.inTransaction || !audit.inTransaction {
@@ -138,6 +138,23 @@ func TestNormalizeMutationRejectsUnknownReadOnlyAndInvalidValues(t *testing.T) {
 		if _, err := normalizeMutation(context.Background(), Scope{"tenant_id": "tenant-a"}, definition, mutation); err == nil {
 			t.Fatalf("normalizeMutation(%#v) accepted invalid input", mutation)
 		}
+	}
+}
+
+func TestNormalizeMutationCreateOnlyFieldIsAcceptedOnlyOnCreate(t *testing.T) {
+	t.Parallel()
+	definition := validDefinition("contacts")
+	definition.Fields = append(definition.Fields, Field{Key: "apartment", Label: "crud.contact.apartment", Type: FieldString, Required: true, CreateOnly: true, Visible: true})
+	create := Mutation{Fields: Fields{"name": "Ana", "active": true, "apartment": "64"}}
+	if normalized, err := normalizeMutationForAction(context.Background(), Scope{}, definition, ActionCreate, create); err != nil || normalized.Fields["apartment"] != "64" {
+		t.Fatalf("create normalization = %#v, %v", normalized, err)
+	}
+	update := Mutation{Fields: Fields{"name": "Ana", "active": true}}
+	if normalized, err := normalizeMutationForAction(context.Background(), Scope{}, definition, ActionUpdate, update); err != nil || normalized.Fields["apartment"] != nil {
+		t.Fatalf("update normalization = %#v, %v", normalized, err)
+	}
+	if _, err := normalizeMutationForAction(context.Background(), Scope{}, definition, ActionUpdate, create); err == nil {
+		t.Fatal("update accepted create-only field")
 	}
 }
 

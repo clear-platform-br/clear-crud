@@ -55,7 +55,7 @@ export class CrudController {
     if (Object.keys(localErrors).length) { this.patch({ phase: 'validation_error', feedback: { kind: 'error', message: 'crud.ui.validation', fields: localErrors } }); return }
     const request = this.beginRequest(); this.patch({ phase: 'submitting', feedback: undefined })
     try {
-      const mutation: Mutation = { fields: editor.fields, details: editor.details }
+      const mutation: Mutation = { fields: mutationFields(this.requireDefinition(), editor), details: editor.details }
       const record = editor.id ? await this.transport.update(this.resource, editor.id, editor.version ?? 0, mutation, request.signal) : await this.transport.create(this.resource, mutation, request.signal)
       if (this.request !== request) return
       this.patch({ phase: 'success', editor: undefined, feedback: { kind: 'success', message: 'crud.ui.saved' } })
@@ -100,7 +100,7 @@ function blankDetails(definition: PublicDefinition): Record<string, DetailMutati
 function recordToDraft(record: CrudRecord, definition: PublicDefinition): EditorDraft { return { id: record.ID, version: record.Version, fields: { ...blankFields(definition.Fields), ...record.Fields }, details: Object.fromEntries(definition.Details.map((detail) => [detail.Key, (record.Details?.[detail.Key] ?? []).map((child) => ({ id: child.ID, version: child.Version, fields: { ...blankFields(detail.Fields), ...child.Fields } }))])) } }
 function validateDraft(definition: PublicDefinition, draft: EditorDraft): Record<string, string> {
   const errors: Record<string, string> = {}
-  for (const field of definition.Fields) validateField(errors, field.Key, field, draft.fields[field.Key])
+  for (const field of definition.Fields) if (!draft.id || !field.CreateOnly) validateField(errors, field.Key, field, draft.fields[field.Key])
   for (const detail of definition.Details) {
     const rows = draft.details[detail.Key] ?? []
     const count = rows.filter((row) => !row.delete).length
@@ -108,6 +108,9 @@ function validateDraft(definition: PublicDefinition, draft: EditorDraft): Record
     for (const row of rows) for (const field of detail.Fields) if (!row.delete) validateField(errors, `${detail.Key}.${field.Key}`, field, row.fields[field.Key])
   }
   return errors
+}
+function mutationFields(definition: PublicDefinition, draft: EditorDraft): Record<string, Value> {
+  return Object.fromEntries(Object.entries(draft.fields).filter(([key]) => !draft.id || !definition.Fields.find((field) => field.Key === key)?.CreateOnly))
 }
 function validateField(errors: Record<string, string>, key: string, field: PublicDefinition['Fields'][number], value: Value | undefined): void {
   if (field.ReadOnly || empty(value)) { if (field.Required && !field.ReadOnly) errors[key] = 'crud.field.required'; return }
