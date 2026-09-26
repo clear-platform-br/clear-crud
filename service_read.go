@@ -39,7 +39,13 @@ func (service *Service) Get(ctx context.Context, key ResourceKey, id RecordID) (
 	if err := service.authorizer.Authorize(ctx, state.principal, key, ActionRead, &record); err != nil {
 		return Record{}, publicError(ErrorForbidden, "crud.error.forbidden", err)
 	}
-	return sanitizeRecord(state.definition, record), nil
+	details, err := service.loadDetails(ctx, state, id)
+	if err != nil {
+		return Record{}, err
+	}
+	record = sanitizeRecord(state.definition, record)
+	record.Details = details
+	return record, nil
 }
 
 // Lookup returns only the value and label shape declared by a lookup field.
@@ -194,11 +200,13 @@ func sanitizePage(definition Definition, page Page) Page {
 func sanitizeRecord(definition Definition, record Record) Record {
 	fields := make(Fields, len(record.Fields))
 	for key, value := range record.Fields {
-		if _, ok := findField(definition.Fields, key); ok {
+		field, ok := findField(definition.Fields, key)
+		if ok && field.Visible {
 			fields[key] = value
 		}
 	}
 	record.Fields = fields
+	record.Details = nil
 	return record
 }
 

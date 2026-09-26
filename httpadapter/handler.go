@@ -158,8 +158,9 @@ func (handler *Handler) record(w http.ResponseWriter, r *http.Request, key crud.
 }
 
 type mutationRequest struct {
-	Version crud.Version `json:"version"`
-	Fields  crud.Fields  `json:"fields"`
+	Version crud.Version         `json:"version"`
+	Fields  crud.Fields          `json:"fields"`
+	Details crud.DetailMutations `json:"details"`
 }
 
 func (handler *Handler) mutation(r *http.Request, definition crud.PublicDefinition, versioned bool) (crud.Mutation, error) {
@@ -170,10 +171,13 @@ func (handler *Handler) mutation(r *http.Request, definition crud.PublicDefiniti
 	if err := normalizeFields(definition, request.Fields); err != nil {
 		return crud.Mutation{}, err
 	}
+	if err := normalizeDetails(definition, request.Details); err != nil {
+		return crud.Mutation{}, err
+	}
 	if versioned && request.Version == 0 {
 		return crud.Mutation{}, invalid()
 	}
-	return crud.Mutation{Fields: request.Fields}, nil
+	return crud.Mutation{Fields: request.Fields, Details: request.Details}, nil
 }
 func (handler *Handler) versionedMutation(r *http.Request, definition crud.PublicDefinition) (crud.Mutation, crud.Version, error) {
 	request, err := handler.decode(r)
@@ -186,7 +190,10 @@ func (handler *Handler) versionedMutation(r *http.Request, definition crud.Publi
 	if err := normalizeFields(definition, request.Fields); err != nil {
 		return crud.Mutation{}, 0, err
 	}
-	return crud.Mutation{Fields: request.Fields}, request.Version, nil
+	if err := normalizeDetails(definition, request.Details); err != nil {
+		return crud.Mutation{}, 0, err
+	}
+	return crud.Mutation{Fields: request.Fields, Details: request.Details}, request.Version, nil
 }
 func (handler *Handler) decode(r *http.Request) (mutationRequest, error) {
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
@@ -254,6 +261,26 @@ func normalizeFields(definition crud.PublicDefinition, fields crud.Fields) error
 				return invalid()
 			}
 			fields[key] = integer
+		}
+	}
+	return nil
+}
+
+func normalizeDetails(definition crud.PublicDefinition, details crud.DetailMutations) error {
+	known := make(map[crud.DetailKey]crud.PublicDetailDefinition, len(definition.Details))
+	for _, detail := range definition.Details {
+		known[detail.Key] = detail
+	}
+	for key, mutations := range details {
+		detail, ok := known[key]
+		if !ok || len(mutations) > int(detail.Maximum) {
+			return invalid()
+		}
+		child := crud.PublicDefinition{Fields: detail.Fields}
+		for _, mutation := range mutations {
+			if err := normalizeFields(child, mutation.Fields); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

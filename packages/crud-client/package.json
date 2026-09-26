@@ -1,0 +1,23 @@
+{
+  "name": "@clear-platform-br/crud-client",
+  "version": "0.2.0-experimental.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.*"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/clear-platform-br/clear-crud.git",
+    "directory": "packages/crud-client"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}

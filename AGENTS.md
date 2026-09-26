@@ -5,6 +5,11 @@
 `clear-crud` implementa a capability pública `clear.crud`: CRUDs administrativos
 simples orientados por definição, sem domínio, banco, tenant ou frontend próprios.
 
+Antes de qualquer agente criar ou alterar um CRUD consumidor, deve ler e aplicar
+[`docs/agent-usage.md`](docs/agent-usage.md). O filtro `clear-crud` versus caso
+de uso próprio é obrigatório e a ausência de capability pública nunca autoriza
+fallback, renderer, handler ou motor CRUD local no produto.
+
 O contrato canônico é governado no repositório `clear_platform` pelos IDs:
 
 - `clear.crud.definition.v1`;

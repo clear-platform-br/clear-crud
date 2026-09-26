@@ -60,7 +60,37 @@ func ValidateDefinition(ctx context.Context, definition Definition) error {
 	if err := validateDeletePolicy(definition); err != nil {
 		return err
 	}
+	if err := validateDetails(definition.Details); err != nil {
+		return err
+	}
 	return validateCapabilities(definition, definition.Source.Capabilities(ctx))
+}
+
+func validateDetails(details []DetailDefinition) error {
+	seen := make(map[DetailKey]struct{}, len(details))
+	for index, detail := range details {
+		path := fmt.Sprintf("details[%d]", index)
+		if !validKey(string(detail.Key)) {
+			return invalidDefinition(path+".key", "must be a lowercase identifier")
+		}
+		if _, exists := seen[detail.Key]; exists {
+			return invalidDefinition(path+".key", "must not be duplicated")
+		}
+		seen[detail.Key] = struct{}{}
+		if !validKey(string(detail.Resource)) {
+			return invalidDefinition(path+".resource", "must be a lowercase identifier")
+		}
+		if !validKey(string(detail.ParentField)) {
+			return invalidDefinition(path+".parent_field", "must be a lowercase identifier")
+		}
+		if detail.Maximum == 0 || detail.Maximum > maxDetailRecords {
+			return invalidDefinition(path+".maximum", "must be between 1 and 100")
+		}
+		if detail.Minimum > detail.Maximum {
+			return invalidDefinition(path+".minimum", "must not exceed maximum")
+		}
+	}
+	return nil
 }
 
 func validateScope(scope ScopeRequirements) error {

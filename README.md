@@ -2,11 +2,15 @@
 
 `clear-crud` é a implementação pública da capability `clear.crud`: cadastros
 administrativos simples, orientados por definição e sem acoplamento a domínio,
-banco ou frontend.
+banco ou produto consumidor.
 
 O módulo está em sua primeira release pública (`v0.1.0`). O primeiro piloto
 será executado no Aztheca Lab, mas o módulo não conhece condomínio, boleto,
 contato ou qualquer vocabulário do laboratório.
+
+Agentes e consumidores devem seguir o [manual de uso](docs/agent-usage.md)
+antes de iniciar um CRUD: ele define o critério objetivo para usar o motor ou
+escrever um caso de uso próprio, sem duplicar a capability no produto.
 
 ## O que este módulo fará
 
@@ -47,6 +51,9 @@ versão e só então é implementada neste módulo.
   escopo, mutações transacionais auditáveis e suíte de conformidade pública.
 - PR 6: `sqladapter.SimpleTable` executa a conformidade contra SQLite real,
   sem importar driver no código publicado.
+- Renderer experimental: `@clear-platform-br/crud-client` concentra transporte,
+  estado e mutations; `@clear-platform-br/crud-vue` entrega a tela Vue 3 padrão,
+  inclusive mestre-detalhe de um nível. Veja o [guia do renderer Vue](docs/renderer-vue.md).
 
 O adapter SQLite é a referência inicial de `simple_table`. Postgres, MySQL e
 MariaDB ainda não foram implementados; a API permanece desacoplada deles e os

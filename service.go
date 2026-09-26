@@ -34,9 +34,11 @@ type PublicDefinition struct {
 	Key          ResourceKey
 	Labels       Labels
 	Fields       []Field
+	Details      []PublicDetailDefinition
 	List         ListDefinition
 	Presentation Presentation
 	Actions      []Action
+	Delete       DeletePolicy
 }
 
 // NewService validates the host ports once during startup.
@@ -57,12 +59,16 @@ func NewService(dependencies Dependencies) (*Service, error) {
 	case isNil(dependencies.Clock):
 		return nil, errors.New("crud service requires a clock")
 	}
-	return &Service{
+	service := &Service{
 		registry: dependencies.Registry, principal: dependencies.Principal,
 		scope: dependencies.Scope, authorizer: dependencies.Authorizer,
 		audit: dependencies.Audit, translator: dependencies.Translator,
 		clock: dependencies.Clock,
-	}, nil
+	}
+	if err := validateMasterDetailDefinitions(dependencies.Registry); err != nil {
+		return nil, err
+	}
+	return service, nil
 }
 
 // Definition returns a renderer-safe definition for a principal that can read
@@ -72,7 +78,7 @@ func (service *Service) Definition(ctx context.Context, key ResourceKey) (Public
 	if err != nil {
 		return PublicDefinition{}, err
 	}
-	return publicDefinition(ctx, state, service.authorizer), nil
+	return publicDefinition(ctx, state, service.authorizer, service.registry), nil
 }
 
 type readState struct {
@@ -122,19 +128,53 @@ func validateTrustedScope(requirements ScopeRequirements, scope Scope) error {
 	return nil
 }
 
-func publicDefinition(ctx context.Context, state readState, authorizer Authorizer) PublicDefinition {
+// PublicDetailDefinition contains renderer-safe metadata for one child collection.
+type PublicDetailDefinition struct {
+	Key         DetailKey
+	Resource    ResourceKey
+	Labels      Labels
+	Fields      []Field
+	Minimum     uint16
+	Maximum     uint16
+	AllowCreate bool
+	AllowUpdate bool
+	AllowDelete bool
+}
+
+func publicDefinition(ctx context.Context, state readState, authorizer Authorizer, registry *Registry) PublicDefinition {
 	definition := PublicDefinition{
 		Key:          state.definition.Key,
 		Labels:       state.definition.Labels,
-		Fields:       cloneDefinition(state.definition).Fields,
 		List:         cloneDefinition(state.definition).List,
 		Presentation: state.definition.Presentation,
+		Delete:       state.definition.Delete,
+	}
+	for _, field := range state.definition.Fields {
+		if field.Visible {
+			definition.Fields = append(definition.Fields, field)
+		}
 	}
 	for _, action := range []Action{ActionCreate, ActionUpdate, ActionDelete, ActionHelp} {
 		if actionEnabled(state.definition.Permissions, action) &&
 			authorizer.Authorize(ctx, state.principal, state.definition.Key, action, nil) == nil {
 			definition.Actions = append(definition.Actions, action)
 		}
+	}
+	for _, detail := range state.definition.Details {
+		child, ok := registry.Get(detail.Resource)
+		if !ok || authorizer.Authorize(ctx, state.principal, child.Key, ActionRead, nil) != nil {
+			continue
+		}
+		public := PublicDetailDefinition{Key: detail.Key, Resource: detail.Resource, Labels: child.Labels, Minimum: detail.Minimum, Maximum: detail.Maximum}
+		for _, field := range child.Fields {
+			if field.Key != detail.ParentField && field.Visible {
+				public.Fields = append(public.Fields, field)
+			}
+		}
+		public.AllowCreate = detail.AllowCreate && actionEnabled(child.Permissions, ActionCreate) && authorizer.Authorize(ctx, state.principal, child.Key, ActionCreate, nil) == nil
+		public.AllowUpdate = detail.AllowUpdate && actionEnabled(child.Permissions, ActionUpdate) && authorizer.Authorize(ctx, state.principal, child.Key, ActionUpdate, nil) == nil
+		public.AllowDelete = detail.AllowDelete && actionEnabled(child.Permissions, ActionDelete) && authorizer.Authorize(ctx, state.principal, child.Key, ActionDelete, nil) == nil
+		definition.Details = append(definition.Details, public)
 	}
 	return definition
 }
