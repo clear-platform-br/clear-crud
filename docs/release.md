@@ -15,7 +15,8 @@ mesma revisão deve passar:
    release GitHub correspondente.
 
 Versões pré-release, como `0.2.0-experimental.0`, são publicadas na tag npm
-`experimental`; elas nunca substituem a tag `latest` de uma versão estável.
+`experimental` e como pré-release no GitHub; elas nunca substituem a tag
+`latest` de uma versão estável.
 
 O workflow usa `GITHUB_TOKEN`; nenhum token é gravado no repositório. Até a
 publicação, um produto consumidor não usa caminho local, `replace`, cópia, fork
