@@ -147,7 +147,7 @@ func normalizeDetailChange(ctx context.Context, scope Scope, detail DetailDefini
 		if !detail.AllowCreate || mutation.Version != 0 {
 			return detailChange{}, invalidMutation(nil)
 		}
-		normalized, err := normalizeMutation(ctx, scope, child, Mutation{Fields: mutation.Fields})
+		normalized, err := normalizeMutationForAction(ctx, scope, child, ActionCreate, Mutation{Fields: mutation.Fields})
 		if err != nil {
 			return detailChange{}, err
 		}
@@ -156,7 +156,7 @@ func normalizeDetailChange(ctx context.Context, scope Scope, detail DetailDefini
 		if !detail.AllowUpdate || mutation.Version == 0 {
 			return detailChange{}, invalidMutation(nil)
 		}
-		normalized, err := normalizeMutation(ctx, scope, child, Mutation{Fields: mutation.Fields})
+		normalized, err := normalizeMutationForAction(ctx, scope, child, ActionUpdate, Mutation{Fields: mutation.Fields})
 		if err != nil {
 			return detailChange{}, err
 		}
@@ -186,7 +186,7 @@ func (service *Service) applyDetailChanges(ctx context.Context, parent readState
 			if err != nil {
 				return nil, detailError(change.definition, unavailable(err))
 			}
-			if err := service.audit.Append(ctx, service.auditEvent(childState, ActionCreate, record.ID, 0, record.Version)); err != nil {
+			if err := service.audit.Append(ctx, service.auditEvent(ctx, childState, ActionCreate, record.ID, 0, record.Version)); err != nil {
 				return nil, unavailable(err)
 			}
 			events = append(events, detailEvent{definition: change.child, event: MutationEvent{Action: ActionCreate, Record: sanitizeRecord(change.child, record)}})
@@ -214,7 +214,7 @@ func (service *Service) applyDetailChanges(ctx context.Context, parent readState
 				if err != nil {
 					return nil, detailError(change.definition, unavailable(err))
 				}
-				if err := service.audit.Append(ctx, service.auditEvent(childState, ActionUpdate, change.id, change.version, record.Version)); err != nil {
+				if err := service.audit.Append(ctx, service.auditEvent(ctx, childState, ActionUpdate, change.id, change.version, record.Version)); err != nil {
 					return nil, unavailable(err)
 				}
 				events = append(events, detailEvent{definition: change.child, event: MutationEvent{Action: ActionUpdate, Record: sanitizeRecord(change.child, record)}})
@@ -232,7 +232,7 @@ func (service *Service) applyDetailChanges(ctx context.Context, parent readState
 			if change.child.Delete.Mode == DeleteModeArchive {
 				after = change.version + 1
 			}
-			if err := service.audit.Append(ctx, service.auditEvent(childState, ActionDelete, change.id, change.version, after)); err != nil {
+			if err := service.audit.Append(ctx, service.auditEvent(ctx, childState, ActionDelete, change.id, change.version, after)); err != nil {
 				return nil, unavailable(err)
 			}
 			events = append(events, detailEvent{definition: change.child, event: MutationEvent{Action: ActionDelete, Record: sanitizeRecord(change.child, current)}})

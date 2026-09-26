@@ -36,6 +36,7 @@ function displayValue(field: Field, value: Value | undefined): string | number {
   return Number.isNaN(date.getTime()) ? value : date.toISOString().slice(0, 16)
 }
 function activeRows(detail: DetailDefinition, editor: EditorDraft) { return (editor.details[detail.Key] ?? []).map((row, index) => ({ row, index })).filter(({ row }) => !row.delete) }
+function fieldDisabled(field: Field, editor: EditorDraft, submitting: boolean): boolean { return submitting || Boolean(editor.id && field.CreateOnly) }
 </script>
 
 <template>
@@ -46,12 +47,12 @@ function activeRows(detail: DetailDefinition, editor: EditorDraft) { return (edi
       <div class="crud-form-fields">
         <label v-for="field in definition.Fields.filter((item) => !item.ReadOnly)" :key="field.Key" class="crud-field" :data-clear-crud-field="field.Key">
           <span class="crud-field-label">{{ translate(field.Label) }}<span v-if="field.Required" aria-hidden="true"> *</span><span v-if="field.Help" class="crud-field-hint" :aria-label="translate(field.Help)" :title="translate(field.Help)">?</span></span>
-          <CrudLookupField v-if="field.Type === 'lookup'" :field="field" :resource="definition.Key" :model-value="editor.fields[field.Key]" :disabled="submitting" :translate="translate" :lookup="lookup" @update="emit('updateField', field.Key, $event)" />
+          <CrudLookupField v-if="field.Type === 'lookup'" :field="field" :resource="definition.Key" :model-value="editor.fields[field.Key]" :disabled="fieldDisabled(field, editor, submitting)" :translate="translate" :lookup="lookup" @update="emit('updateField', field.Key, $event)" />
           <div v-else-if="field.Type === 'enum'" class="crud-enum" role="radiogroup" :aria-label="translate(field.Label)">
-            <button v-for="option in field.Enum ?? []" :key="String(option.Value)" class="crud-enum-option" type="button" role="radio" :aria-checked="editor.fields[field.Key] === option.Value" :disabled="submitting" @click="emit('updateField', field.Key, option.Value)">{{ translate(option.Label) }}</button>
+            <button v-for="option in field.Enum ?? []" :key="String(option.Value)" class="crud-enum-option" type="button" role="radio" :aria-checked="editor.fields[field.Key] === option.Value" :disabled="fieldDisabled(field, editor, submitting)" @click="emit('updateField', field.Key, option.Value)">{{ translate(option.Label) }}</button>
           </div>
-          <textarea v-else-if="field.Type === 'text'" class="crud-input" :value="displayValue(field, editor.fields[field.Key])" :required="field.Required" :disabled="submitting" @input="emit('updateField', field.Key, valueFromEvent(field, $event))" />
-          <input v-else class="crud-input" :type="inputType(field)" :checked="field.Type === 'boolean' ? Boolean(editor.fields[field.Key]) : undefined" :value="field.Type === 'boolean' ? undefined : displayValue(field, editor.fields[field.Key])" :required="field.Required" :disabled="submitting" @input="emit('updateField', field.Key, valueFromEvent(field, $event))">
+          <textarea v-else-if="field.Type === 'text'" class="crud-input" :value="displayValue(field, editor.fields[field.Key])" :required="field.Required && !(editor.id && field.CreateOnly)" :disabled="fieldDisabled(field, editor, submitting)" @input="emit('updateField', field.Key, valueFromEvent(field, $event))" />
+          <input v-else class="crud-input" :type="inputType(field)" :checked="field.Type === 'boolean' ? Boolean(editor.fields[field.Key]) : undefined" :value="field.Type === 'boolean' ? undefined : displayValue(field, editor.fields[field.Key])" :required="field.Required && !(editor.id && field.CreateOnly)" :disabled="fieldDisabled(field, editor, submitting)" @input="emit('updateField', field.Key, valueFromEvent(field, $event))">
           <small v-if="feedback?.fields?.[field.Key]" class="crud-field-error">{{ translate(feedback.fields[field.Key]) }}</small>
         </label>
       </div>

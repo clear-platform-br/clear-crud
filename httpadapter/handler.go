@@ -40,6 +40,7 @@ func New(service *crud.Service, options Options) (*Handler, error) {
 
 func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "private, no-store")
+	request = request.WithContext(crud.WithCorrelationID(request.Context(), handler.correlation(request)))
 	parts := strings.Split(strings.Trim(request.URL.Path, "/"), "/")
 	if len(parts) < 5 || strings.Join(parts[:3], "/") != "api/v1/crud" {
 		handler.fail(writer, request, nil, crud.ErrorNotFound)
@@ -341,6 +342,9 @@ func (handler *Handler) fail(w http.ResponseWriter, r *http.Request, public *cru
 	_ = json.NewEncoder(w).Encode(map[string]any{"error": body})
 }
 func (handler *Handler) correlation(r *http.Request) string {
+	if id := crud.CorrelationID(r.Context()); id != "" {
+		return id
+	}
 	if handler.options.CorrelationID == nil {
 		return ""
 	}

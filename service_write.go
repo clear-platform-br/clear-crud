@@ -8,7 +8,7 @@ func (service *Service) Create(ctx context.Context, key ResourceKey, mutation Mu
 	if err != nil {
 		return Record{}, err
 	}
-	normalized, err := normalizeMutation(ctx, state.scope, state.definition, mutation)
+	normalized, err := normalizeMutationForAction(ctx, state.scope, state.definition, ActionCreate, mutation)
 	if err != nil {
 		return Record{}, err
 	}
@@ -29,7 +29,7 @@ func (service *Service) Create(ctx context.Context, key ResourceKey, mutation Mu
 		if err != nil {
 			return unavailable(err)
 		}
-		if err := service.audit.Append(transaction, service.auditEvent(state, ActionCreate, record.ID, 0, record.Version)); err != nil {
+		if err := service.audit.Append(transaction, service.auditEvent(transaction, state, ActionCreate, record.ID, 0, record.Version)); err != nil {
 			return unavailable(err)
 		}
 		detailEvents, err = service.applyDetailChanges(transaction, state, record.ID, detailChanges)
@@ -63,7 +63,7 @@ func (service *Service) Update(ctx context.Context, key ResourceKey, id RecordID
 	if err != nil {
 		return Record{}, err
 	}
-	normalized, err := normalizeMutation(ctx, state.scope, state.definition, mutation)
+	normalized, err := normalizeMutationForAction(ctx, state.scope, state.definition, ActionUpdate, mutation)
 	if err != nil {
 		return Record{}, err
 	}
@@ -91,7 +91,7 @@ func (service *Service) Update(ctx context.Context, key ResourceKey, id RecordID
 		if err != nil {
 			return unavailable(err)
 		}
-		if err := service.audit.Append(transaction, service.auditEvent(state, ActionUpdate, id, version, record.Version)); err != nil {
+		if err := service.audit.Append(transaction, service.auditEvent(transaction, state, ActionUpdate, id, version, record.Version)); err != nil {
 			return unavailable(err)
 		}
 		detailEvents, err = service.applyDetailChanges(transaction, state, id, detailChanges)
@@ -146,7 +146,7 @@ func (service *Service) Delete(ctx context.Context, key ResourceKey, id RecordID
 		if state.definition.Delete.Mode == DeleteModeArchive {
 			afterVersion = version + 1
 		}
-		if err := service.audit.Append(transaction, service.auditEvent(state, ActionDelete, id, version, afterVersion)); err != nil {
+		if err := service.audit.Append(transaction, service.auditEvent(transaction, state, ActionDelete, id, version, afterVersion)); err != nil {
 			return unavailable(err)
 		}
 		deleted = sanitizeRecord(state.definition, current)
@@ -187,11 +187,11 @@ func (service *Service) resolveAction(ctx context.Context, key ResourceKey, acti
 	return readState{definition: definition, principal: principal, scope: cloneScope(scope)}, nil
 }
 
-func (service *Service) auditEvent(state readState, action Action, id RecordID, before, after Version) AuditEvent {
+func (service *Service) auditEvent(ctx context.Context, state readState, action Action, id RecordID, before, after Version) AuditEvent {
 	return AuditEvent{
 		Resource: state.definition.Key, Action: action, RecordID: id,
 		BeforeVersion: before, AfterVersion: after, Principal: state.principal,
-		Scope: cloneScope(state.scope), OccurredAt: service.clock.Now(),
+		Scope: cloneScope(state.scope), OccurredAt: service.clock.Now(), CorrelationID: CorrelationID(ctx),
 	}
 }
 

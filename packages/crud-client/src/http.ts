@@ -138,7 +138,7 @@ function normalizeField(value: unknown): Field {
   const raw = asObject(value)
   return {
     Key: String(raw.Key ?? raw.key ?? ''), Label: String(raw.Label ?? raw.label ?? ''), Help: stringOrUndefined(raw.Help ?? raw.help), Type: String(raw.Type ?? raw.type ?? 'string') as Field['Type'],
-    Required: Boolean(raw.Required ?? raw.required), ReadOnly: Boolean(raw.ReadOnly ?? raw.readOnly), Visible: Boolean(raw.Visible ?? raw.visible), Sensitive: Boolean(raw.Sensitive ?? raw.sensitive),
+    Required: Boolean(raw.Required ?? raw.required), ReadOnly: Boolean(raw.ReadOnly ?? raw.readOnly), CreateOnly: Boolean(raw.CreateOnly ?? raw.createOnly), Visible: Boolean(raw.Visible ?? raw.visible), Sensitive: Boolean(raw.Sensitive ?? raw.sensitive),
     MinLength: numberOrUndefined(raw.MinLength ?? raw.minLength), MaxLength: numberOrUndefined(raw.MaxLength ?? raw.maxLength), Minimum: stringOrUndefined(raw.Minimum ?? raw.minimum), Maximum: stringOrUndefined(raw.Maximum ?? raw.maximum),
     Enum: asArray(raw.Enum ?? raw.enum).map((option) => { const item = asObject(option); return { Value: (item.Value ?? item.value ?? null) as Value, Label: String(item.Label ?? item.label ?? '') } }),
     Lookup: raw.Lookup || raw.lookup ? normalizeLookup(raw.Lookup ?? raw.lookup) : undefined,

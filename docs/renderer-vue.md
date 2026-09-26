@@ -33,6 +33,10 @@ ajuda declarada. Ajuda de campo também usa `?`; edição usa lápis, inclusão 
 `+` e remoção usa `×`, sempre com rótulo acessível. A confirmação informa se
 a ação arquiva ou elimina definitivamente o registro.
 
+Campos `create_only` aceitam valor na inclusão e aparecem desabilitados durante
+a edição. O client os omite da mutation de update; o backend continua sendo a
+autoridade e também os rejeita se forem enviados diretamente.
+
 ## Mestre-detalhe
 
 Quando a definição pública expõe `Details`, o editor apresenta as coleções

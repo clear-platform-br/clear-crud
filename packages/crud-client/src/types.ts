@@ -9,6 +9,7 @@ export interface Field {
   Type: FieldType
   Required: boolean
   ReadOnly: boolean
+  CreateOnly?: boolean
   Visible: boolean
   Sensitive: boolean
   MinLength?: number
