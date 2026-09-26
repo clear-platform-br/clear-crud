@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import CrudToolbar from './CrudToolbar.vue'
 import { createTranslator, ptBR } from '../messages.js'
-import type { PublicDefinition } from '@clear-platform/crud-client'
+import type { PublicDefinition } from '@clear-platform-br/crud-client'
 
 const definition: PublicDefinition = {
   Key: 'contacts', Labels: { Title: 'contacts.title', Singular: 'contacts.singular', Help: 'contacts.help' }, Fields: [], Details: [],

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CrudFeedback, DetailDefinition, EditorDraft, Field, PublicDefinition, Value } from '@clear-platform/crud-client'
+import type { CrudFeedback, DetailDefinition, EditorDraft, Field, PublicDefinition, Value } from '@clear-platform-br/crud-client'
 import CrudLookupField from './CrudLookupField.vue'
 import type { CrudMessages, Translate } from '../messages.js'
 

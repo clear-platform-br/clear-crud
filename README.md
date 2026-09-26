@@ -51,8 +51,8 @@ versão e só então é implementada neste módulo.
   escopo, mutações transacionais auditáveis e suíte de conformidade pública.
 - PR 6: `sqladapter.SimpleTable` executa a conformidade contra SQLite real,
   sem importar driver no código publicado.
-- Renderer experimental: `@clear-platform/crud-client` concentra transporte,
-  estado e mutations; `@clear-platform/crud-vue` entrega a tela Vue 3 padrão,
+- Renderer experimental: `@clear-platform-br/crud-client` concentra transporte,
+  estado e mutations; `@clear-platform-br/crud-vue` entrega a tela Vue 3 padrão,
   inclusive mestre-detalhe de um nível. Veja o [guia do renderer Vue](docs/renderer-vue.md).
 
 O adapter SQLite é a referência inicial de `simple_table`. Postgres, MySQL e

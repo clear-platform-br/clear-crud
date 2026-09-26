@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PublicDefinition } from '@clear-platform/crud-client'
+import type { PublicDefinition } from '@clear-platform-br/crud-client'
 import type { CrudMessages, Translate } from '../messages.js'
 
 defineProps<{ definition: PublicDefinition; messages: CrudMessages; translate: Translate; loading: boolean }>()

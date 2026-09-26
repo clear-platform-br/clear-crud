@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import CrudEditor from './CrudEditor.vue'
 import { ptBR, createTranslator } from '../messages.js'
-import type { EditorDraft, PublicDefinition } from '@clear-platform/crud-client'
+import type { EditorDraft, PublicDefinition } from '@clear-platform-br/crud-client'
 
 const definition: PublicDefinition = {
   Key: 'contacts', Labels: { Title: 'contacts.title', Singular: 'contacts.singular' },

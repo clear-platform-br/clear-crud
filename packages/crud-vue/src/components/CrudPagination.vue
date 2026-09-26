@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Page } from '@clear-platform/crud-client'
+import type { Page } from '@clear-platform-br/crud-client'
 import type { CrudMessages } from '../messages.js'
 
 defineProps<{ page?: Page; messages: CrudMessages; loading: boolean }>()

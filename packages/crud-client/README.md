@@ -1,4 +1,4 @@
-# `@clear-platform/crud-client`
+# `@clear-platform-br/crud-client`
 
 Client TypeScript experimental do contrato `clear.crud.http.v1`. Ele concentra
 transporte HTTP, estado, concorrência, validação estrutural e mutation
@@ -7,7 +7,7 @@ mestre-detalhe; produtos não recriam esse comportamento.
 Use somente uma versão pública fixada e um endpoint CRUD fechado pelo servidor:
 
 ```ts
-import { HttpCrudClient } from '@clear-platform/crud-client'
+import { HttpCrudClient } from '@clear-platform-br/crud-client'
 
 const client = new HttpCrudClient({ baseUrl: '/api/v1/crud' })
 ```

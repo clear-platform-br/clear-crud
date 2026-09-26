@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref } from 'vue'
-import type { CrudTransport } from '@clear-platform/crud-client'
+import type { CrudTransport } from '@clear-platform-br/crud-client'
 import CrudCollection from './CrudCollection.vue'
 import CrudConfirmDelete from './CrudConfirmDelete.vue'
 import CrudEditor from './CrudEditor.vue'

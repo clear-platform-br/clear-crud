@@ -3,9 +3,9 @@
 O renderer experimental é composto por dois pacotes versionáveis neste
 repositório:
 
-- `@clear-platform/crud-client`: transporte HTTP v1, estado, concorrência,
+- `@clear-platform-br/crud-client`: transporte HTTP v1, estado, concorrência,
   paginação, mutation, erros públicos e mestre-detalhe;
-- `@clear-platform/crud-vue`: componentes Vue 3, tema opcional e composição da
+- `@clear-platform-br/crud-vue`: componentes Vue 3, tema opcional e composição da
   tela.
 
 O produto não escreve grade, formulário, paginação, busca, cliente HTTP,
@@ -13,9 +13,9 @@ handler ou feedback CRUD paralelo. Ele fornece um `CrudTransport` configurado
 para o endpoint fechado do produto e monta `CrudScreen` pela chave do recurso.
 
 ```ts
-import { HttpCrudClient } from '@clear-platform/crud-client'
-import { CrudScreen, ptBR } from '@clear-platform/crud-vue'
-import '@clear-platform/crud-vue/theme-default.css'
+import { HttpCrudClient } from '@clear-platform-br/crud-client'
+import { CrudScreen, ptBR } from '@clear-platform-br/crud-vue'
+import '@clear-platform-br/crud-vue/theme-default.css'
 
 const client = new HttpCrudClient({ baseUrl: '/api/v1/crud' })
 ```

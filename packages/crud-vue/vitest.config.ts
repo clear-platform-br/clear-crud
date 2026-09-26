@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '@clear-platform/crud-client': fileURLToPath(new URL('../crud-client/src/index.ts', import.meta.url)),
+      '@clear-platform-br/crud-client': fileURLToPath(new URL('../crud-client/src/index.ts', import.meta.url)),
     },
   },
   test: {

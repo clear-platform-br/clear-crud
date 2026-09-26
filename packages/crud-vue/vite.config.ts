@@ -13,7 +13,7 @@ export default defineConfig({
       fileName: 'index',
     },
     rollupOptions: {
-      external: ['vue', '@clear-platform/crud-client'],
+      external: ['vue', '@clear-platform-br/crud-client'],
     },
   },
 })

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, useTemplateRef } from 'vue'
-import type { CrudRecord } from '@clear-platform/crud-client'
+import type { CrudRecord } from '@clear-platform-br/crud-client'
 import type { CrudMessages, Translate } from '../messages.js'
 
 const props = defineProps<{ record: CrudRecord; mode: 'archive' | 'hard_delete'; messages: CrudMessages; translate: Translate; busy: boolean }>()

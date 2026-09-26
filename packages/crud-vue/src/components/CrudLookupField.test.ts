@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import CrudLookupField from './CrudLookupField.vue'
 import { createTranslator, ptBR } from '../messages.js'
-import type { Field } from '@clear-platform/crud-client'
+import type { Field } from '@clear-platform-br/crud-client'
 
 const field: Field = { Key: 'category_id', Label: 'category.label', Type: 'lookup', Required: false, ReadOnly: false, Visible: true, Sensitive: false }
 

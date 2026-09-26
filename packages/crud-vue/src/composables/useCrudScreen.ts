@@ -1,4 +1,4 @@
-import { CrudController, type CrudRecord, type CrudState, type CrudTransport, type Value } from '@clear-platform/crud-client'
+import { CrudController, type CrudRecord, type CrudState, type CrudTransport, type Value } from '@clear-platform-br/crud-client'
 import { onMounted, onUnmounted, shallowRef } from 'vue'
 
 export function useCrudScreen(resource: string, client: CrudTransport) {

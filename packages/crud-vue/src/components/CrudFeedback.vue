@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CrudFeedback } from '@clear-platform/crud-client'
+import type { CrudFeedback } from '@clear-platform-br/crud-client'
 import type { CrudMessages, Translate } from '../messages.js'
 
 defineProps<{ feedback?: CrudFeedback; messages: CrudMessages; translate: Translate }>()

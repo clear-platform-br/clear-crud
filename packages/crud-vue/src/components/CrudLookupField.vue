@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onUnmounted, ref, shallowRef, watch } from 'vue'
-import type { Field, LookupOption, Value } from '@clear-platform/crud-client'
+import type { Field, LookupOption, Value } from '@clear-platform-br/crud-client'
 import type { Translate } from '../messages.js'
 
 const props = defineProps<{ field: Field; resource: string; modelValue: Value; disabled: boolean; translate: Translate; lookup: (resource: string, field: string, search: string) => Promise<LookupOption[]> }>()

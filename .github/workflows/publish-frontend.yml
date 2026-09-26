@@ -1,0 +1,48 @@
+name: publish frontend packages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.15.0"
+          registry-url: https://npm.pkg.github.com
+          scope: "@clear-platform-br"
+          cache: npm
+      - run: npm ci
+      - run: npm run frontend:build
+      - run: npm run frontend:test
+      - run: npm run frontend:pack
+      - name: Publish client
+        run: npm publish --workspace @clear-platform-br/crud-client
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish Vue renderer
+        run: npm publish --workspace @clear-platform-br/crud-vue
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tag published frontend version
+        run: |
+          package_version="$(node -p \"require('./packages/crud-client/package.json').version\")"
+          vue_version="$(node -p \"require('./packages/crud-vue/package.json').version\")"
+          test "$package_version" = "$vue_version"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git tag -a "frontend-v$package_version" -m "frontend packages v$package_version"
+          git push origin "frontend-v$package_version"
+      - name: Create GitHub release
+        run: |
+          package_version="$(node -p \"require('./packages/crud-client/package.json').version\")"
+          gh release create "frontend-v$package_version" --generate-notes --title "Frontend packages v$package_version"
+        env:
+          GH_TOKEN: ${{ github.token }}

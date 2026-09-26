@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { CrudRecord, PublicDefinition, Value } from '@clear-platform/crud-client'
+import type { CrudRecord, PublicDefinition, Value } from '@clear-platform-br/crud-client'
 import type { CrudMessages, Translate } from '../messages.js'
 
 const props = defineProps<{ definition: PublicDefinition; records: CrudRecord[]; messages: CrudMessages; translate: Translate; loading: boolean }>()
