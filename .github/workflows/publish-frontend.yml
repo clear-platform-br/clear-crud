@@ -24,11 +24,11 @@ jobs:
       - run: npm run frontend:test
       - run: npm run frontend:pack
       - name: Publish client
-        run: npm publish --workspace @clear-platform-br/crud-client
+        run: npm publish --tag experimental --workspace @clear-platform-br/crud-client
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish Vue renderer
-        run: npm publish --workspace @clear-platform-br/crud-vue
+        run: npm publish --tag experimental --workspace @clear-platform-br/crud-vue
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Tag published frontend version
