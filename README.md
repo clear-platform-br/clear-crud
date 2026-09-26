@@ -4,9 +4,9 @@
 administrativos simples, orientados por definição e sem acoplamento a domínio,
 banco ou produto consumidor.
 
-O módulo está em sua primeira release pública (`v0.1.0`). O primeiro piloto
-será executado no Aztheca Lab, mas o módulo não conhece condomínio, boleto,
-contato ou qualquer vocabulário do laboratório.
+O módulo possui release pública estável `v0.3.0`. O primeiro piloto será
+executado no Aztheca Lab, mas o módulo não conhece condomínio, boleto, contato
+ou qualquer vocabulário do laboratório.
 
 Agentes e consumidores devem seguir o [manual de uso](docs/agent-usage.md)
 antes de iniciar um CRUD: ele define o critério objetivo para usar o motor ou
@@ -53,6 +53,8 @@ versão e só então é implementada neste módulo.
   sem importar driver no código publicado. Ele aceita ID gerado pelo banco ou
   identidade escalar `create_only`, estado de archive explícito e colunas
   técnicas preenchidas a partir de escopo confiável ou UTC do servidor.
+- Auditoria SQL: `sqladapter.NewAuditSink` grava metadados redigidos na mesma
+  transação de `SimpleTable`; o host fornece a tabela e o mapping fechado.
 - Renderer experimental: `@clear-platform-br/crud-client` concentra transporte,
   estado e mutations; `@clear-platform-br/crud-vue` entrega a tela Vue 3 padrão,
   inclusive mestre-detalhe de um nível. Veja o [guia do renderer Vue](docs/renderer-vue.md).
