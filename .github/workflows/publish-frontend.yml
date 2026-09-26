@@ -50,11 +50,21 @@ jobs:
           test "$package_version" = "$vue_version"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "frontend-v$package_version" -m "frontend packages v$package_version"
-          git push origin "frontend-v$package_version"
+          if git ls-remote --exit-code --tags origin "refs/tags/frontend-v$package_version" >/dev/null; then
+            echo "frontend-v$package_version is already tagged"
+          else
+            git tag -a "frontend-v$package_version" -m "frontend packages v$package_version"
+            git push origin "frontend-v$package_version"
+          fi
       - name: Create GitHub release
         run: |
           package_version="$(node -p "require('./packages/crud-client/package.json').version")"
-          gh release create "frontend-v$package_version" --generate-notes --title "Frontend packages v$package_version"
+          if gh release view "frontend-v$package_version" >/dev/null 2>&1; then
+            echo "frontend-v$package_version already has a GitHub release"
+          elif [[ "$package_version" == *-* ]]; then
+            gh release create "frontend-v$package_version" --generate-notes --prerelease --title "Frontend packages v$package_version"
+          else
+            gh release create "frontend-v$package_version" --generate-notes --title "Frontend packages v$package_version"
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
