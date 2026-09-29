@@ -15,6 +15,13 @@ Funcionalidade: Renderer padrão de CRUD
     E apresenta o erro associado ao campo
     E não expõe detalhes técnicos do servidor
 
+  Cenário: Editor identifica o registro pai selecionado
+    Dado que a definição declara `Presentation.TitleField` para um campo visível
+    Quando o operador abre um registro pai existente para editar seus itens
+    Então o cabeçalho do modal mostra o valor desse campo
+    E a inclusão de um novo pai continua usando o título fixo da definição
+    E a opção não altera escopo, autorização, mutation ou persistência
+
   Cenário: Ações simbólicas continuam acessíveis
     Dado que a lista apresenta registros editáveis e apagáveis
     Quando o operador usa teclado ou leitor de tela

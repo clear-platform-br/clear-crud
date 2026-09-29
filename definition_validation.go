@@ -57,7 +57,7 @@ func ValidateDefinition(ctx context.Context, definition Definition) error {
 	if err := validateForm(definition.Form, fields); err != nil {
 		return err
 	}
-	if err := validatePresentation(definition.Presentation); err != nil {
+	if err := validatePresentation(definition.Presentation, fields); err != nil {
 		return err
 	}
 	if err := validateDeletePolicy(definition); err != nil {
@@ -116,13 +116,19 @@ func validateScope(scope ScopeRequirements) error {
 	return nil
 }
 
-func validatePresentation(presentation Presentation) error {
+func validatePresentation(presentation Presentation, fields map[FieldKey]Field) error {
 	if presentation.Collection != CollectionAuto && presentation.Collection != CollectionTable &&
 		presentation.Collection != CollectionCards && presentation.Collection != CollectionList {
 		return invalidDefinition("presentation.collection", "is unknown")
 	}
 	if presentation.Density != DensityCompact && presentation.Density != DensityComfortable {
 		return invalidDefinition("presentation.density", "is unknown")
+	}
+	if presentation.TitleField != "" {
+		field, ok := fields[presentation.TitleField]
+		if !ok || !field.Visible || field.Sensitive {
+			return invalidDefinition("presentation.title_field", "must reference a visible non-sensitive field")
+		}
 	}
 	return nil
 }

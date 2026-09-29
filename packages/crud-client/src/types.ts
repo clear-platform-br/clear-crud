@@ -63,7 +63,7 @@ export interface PublicDefinition {
     ArchiveVisibility?: ArchiveVisibility
   }
   Form: { Fields: string[] }
-  Presentation: { Collection: 'auto' | 'table' | 'cards' | 'list'; Density: 'compact' | 'comfortable' }
+  Presentation: { Collection: 'auto' | 'table' | 'cards' | 'list'; Density: 'compact' | 'comfortable'; TitleField?: string }
   Actions: Action[]
   Delete?: { Mode: 'none' | 'archive' | 'hard_delete' }
 }

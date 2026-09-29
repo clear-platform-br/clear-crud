@@ -21,3 +21,16 @@ Versões pré-release, como `0.2.0-experimental.0`, são publicadas na tag npm
 O workflow usa `GITHUB_TOKEN`; nenhum token é gravado no repositório. Até a
 publicação, um produto consumidor não usa caminho local, `replace`, cópia, fork
 ou `vendor`.
+
+## Regra de compatibilidade
+
+Depois que houver consumidores externos, uma release compatível só pode:
+
+- adicionar entradas opcionais com o default antigo;
+- adicionar campos opcionais a outputs, sem remover, renomear ou mudar o tipo e
+  o significado dos campos existentes;
+- corrigir falhas sem alterar o contrato observável de uma operação válida.
+
+Toda mudança incompatível exige nova major, contrato versionado, guia de
+migração e período explícito de coexistência. Testes de regressão devem provar
+que uma definição sem a nova opção continua produzindo o comportamento anterior.

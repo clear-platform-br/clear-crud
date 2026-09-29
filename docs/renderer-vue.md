@@ -31,6 +31,27 @@ const client = new HttpCrudClient({ baseUrl: '/api/v1/crud' })
 servidor. O catálogo `ptBR` ou `enUS` cobre apenas a interface comum do motor;
 o renderer não contém vocabulário de domínio.
 
+### Título contextual do editor
+
+O título fixo da definição continua sendo o fallback. Quando o host abre um
+registro pai e precisa identificar a linha escolhida (por exemplo, uma tabela
+auxiliar), a definição pode declarar um campo de título de contexto:
+
+```go
+Presentation: crud.Presentation{
+    Collection:  crud.CollectionTable,
+    Density:     crud.DensityComfortable,
+    TitleField:  "title",
+},
+```
+
+Em um registro existente, o renderer Vue usa o valor desse campo no cabeçalho
+do modal. Na inclusão, ou quando o valor estiver vazio, usa o label fixo da
+definição. O campo precisa ser visível e não sensível; a validação ocorre no
+bootstrap. Isso altera apenas a apresentação: não muda escopo, autorização,
+campos enviados ou persistência. O host não deve hardcodar o nome de um domínio
+no renderer.
+
 Quando a definição autoriza `help`, o renderer apresenta o botão `?` e abre a
 ajuda declarada. Ajuda de campo também usa `?`; edição usa lápis, inclusão usa
 `+` e remoção usa `×`, sempre com rótulo acessível. A confirmação informa se

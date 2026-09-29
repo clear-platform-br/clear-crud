@@ -246,6 +246,8 @@ func registerAuxiliaryCatalogDemo(ctx context.Context, database *sql.DB, registr
 
 	// 3. Relação: conecte pai e filhos pelo contrato genérico de detalhes.
 	catalogs.Details = []crud.DetailDefinition{{Key: "options", Resource: options.Key, ParentField: "catalog_id", Maximum: 99, AllowCreate: true, AllowUpdate: true, AllowDelete: true}}
+	// 3.1 Contexto: mostre o nome da tabela pai ao editar seus itens.
+	catalogs.Presentation.TitleField = "title"
 
 	// 4. Registro: publique os dois recursos sem rota específica de catálogo.
 	if err := registry.Register(ctx, catalogs); err != nil {

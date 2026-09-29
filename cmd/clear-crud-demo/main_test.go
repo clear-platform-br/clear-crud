@@ -225,6 +225,9 @@ func TestDemoHandlerServesTheAutomaticResource(t *testing.T) {
 	if len(auxiliaryEnvelope.Data.Grid.Columns) != 1 || auxiliaryEnvelope.Data.Grid.Columns[0] != "title" {
 		t.Fatalf("auxiliary catalog grid = %#v, want only table title", auxiliaryEnvelope.Data.Grid.Columns)
 	}
+	if auxiliaryEnvelope.Data.Presentation.TitleField != "title" {
+		t.Fatalf("auxiliary catalog title field = %q, want title", auxiliaryEnvelope.Data.Presentation.TitleField)
+	}
 	auxiliaryLookupDefinitionRequest := httptest.NewRequest(http.MethodGet, "/api/v1/crud/"+demoAuxiliaryCatalogLookupTable+"/definition", nil)
 	auxiliaryLookupDefinitionResponse := httptest.NewRecorder()
 	handler.ServeHTTP(auxiliaryLookupDefinitionResponse, auxiliaryLookupDefinitionRequest)

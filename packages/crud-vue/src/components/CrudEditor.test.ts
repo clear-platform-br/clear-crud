@@ -10,11 +10,22 @@ const definition: PublicDefinition = {
   Fields: [{ Key: 'name', Label: 'contacts.name', Type: 'string', Required: true, ReadOnly: false, Visible: true, Sensitive: false }],
   Details: [{ Key: 'destinations', Resource: 'contact_destinations', Labels: { Title: 'destinations.title', Singular: 'destinations.singular' }, Fields: [{ Key: 'address', Label: 'destinations.address', Type: 'email', Required: true, ReadOnly: false, Visible: true, Sensitive: false }], Minimum: 0, Maximum: 2, AllowCreate: true, AllowUpdate: true, AllowDelete: true }],
   Grid: { Columns: ['name'], Searchable: ['name'], Sortable: ['name'], DefaultSort: [{ Field: 'name', Direction: 'asc' }], Pagination: { Mode: 'offset', DefaultSize: 25, AllowedSizes: [25], Total: true } }, Form: { Fields: [] },
-  Presentation: { Collection: 'table', Density: 'comfortable' }, Actions: ['create', 'read'],
+  Presentation: { Collection: 'table', Density: 'comfortable', TitleField: 'name' }, Actions: ['create', 'read'],
 }
 const editor: EditorDraft = { fields: { name: 'Ana' }, details: { destinations: [] } }
 
 describe('CrudEditor', () => {
+  it('uses the declared title field for an existing record and keeps labels for new records', () => {
+    const contextual = mount(CrudEditor, { props: { definition, editor: { id: 'contact-1', version: 1, fields: { name: 'Ana' }, details: { destinations: [] } }, messages: ptBR, translate: createTranslator(ptBR, (key) => ({ 'contacts.singular': 'Contato' }[key])), submitting: false, lookup: async () => [] } })
+    expect(contextual.get('.crud-editor-title').text()).toBe('Ana')
+
+    const emptyTitle = mount(CrudEditor, { props: { definition, editor: { id: 'contact-2', version: 1, fields: { name: null }, details: { destinations: [] } }, messages: ptBR, translate: createTranslator(ptBR, (key) => ({ 'contacts.singular': 'Contato' }[key])), submitting: false, lookup: async () => [] } })
+    expect(emptyTitle.get('.crud-editor-title').text()).toBe('Contato')
+
+    const creating = mount(CrudEditor, { props: { definition, editor, messages: ptBR, translate: createTranslator(ptBR, (key) => ({ 'contacts.title': 'Contatos' }[key])), submitting: false, lookup: async () => [] } })
+    expect(creating.get('.crud-editor-title').text()).toBe('Contatos')
+  })
+
   it('renders a declared child collection and emits its add action', async () => {
     const wrapper = mount(CrudEditor, { props: { definition, editor, messages: ptBR, translate: createTranslator(ptBR, (key) => ({ 'destinations.title': 'Destinos' }[key])), submitting: false, lookup: async () => [] } })
     expect(wrapper.get('[data-clear-crud-detail="destinations"]').text()).toContain('Destinos')
