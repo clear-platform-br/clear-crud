@@ -1,5 +1,6 @@
 export { default as CrudScreen } from './components/CrudScreen.vue'
 export { default as CrudToolbar } from './components/CrudToolbar.vue'
+export { default as CrudFilters } from './components/CrudFilters.vue'
 export { default as CrudCollection } from './components/CrudCollection.vue'
 export { default as CrudEditor } from './components/CrudEditor.vue'
 export { default as CrudFeedback } from './components/CrudFeedback.vue'

@@ -31,8 +31,28 @@ banco reais em CI.
 - atualização concorrente com a mesma versão produz exatamente um sucesso e
   um conflito;
 - `none`, `archive` e `hard_delete` seguem a política declarada;
+- após `archive`, o registro não aparece em `List` ou `Get` normais e não
+  aceita `Update` normal;
+- quando a definição declara `active_and_archived`, `List` aceita a consulta
+  opt-in e marca os registros arquivados como somente leitura;
 - lookup retorna somente opções públicas completas;
 - uma mutação dentro de `UnitOfWork` é desfeita quando a transação falha.
 
 Uma capability não declarada não é presumida. Uma capability declarada sem o
-comportamento correspondente reprova o adapter.
+comportamento correspondente reprova o adapter. O core define esse
+comportamento; o adapter apenas o traduz para sua persistência, sem criar
+políticas próprias por banco ou por produto.
+
+## Metadados estruturais no bootstrap
+
+Um adapter pode implementar `crud.MetadataSource` para devolver fatos seguros
+do schema durante `Registry.Register`. Quando uma coluna possui um conjunto
+finito reconhecido por enum nativo ou `CHECK`, o core promove o campo para
+`FieldEnum` e apresenta os valores por padrão. O adapter não é consultado em
+requisições HTTP.
+
+Uma definição explícita pode restringir esse conjunto a um subconjunto e trocar
+labels ou ordem. Um valor fora do conjunto estrutural faz o registro falhar;
+uma definição nunca amplia o que o banco aceita. O adapter SQLite reconhece
+listas `IN (...)` e igualdades finitas ligadas por `OR`; outros adapters devem
+normalizar seus enums nativos ou checks na mesma porta.

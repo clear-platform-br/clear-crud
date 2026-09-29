@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"sync"
 )
@@ -35,7 +36,16 @@ func (registry *Registry) Register(ctx context.Context, definition Definition) e
 	if registry == nil {
 		return errors.New("crud registry is nil")
 	}
+	enriched, err := applySourceMetadata(ctx, definition)
+	if err != nil {
+		return err
+	}
+	definition = enriched
 	if err := ValidateDefinition(ctx, definition); err != nil {
+		return err
+	}
+	definition, err = prepareDefinitionPatterns(definition)
+	if err != nil {
 		return err
 	}
 
@@ -113,18 +123,31 @@ func cloneDefinition(definition Definition) Definition {
 	clone.Fields = make([]Field, len(definition.Fields))
 	for index, field := range definition.Fields {
 		clone.Fields[index] = field
+		clone.Fields[index].Default = field.Default
 		clone.Fields[index].Enum = append([]Option(nil), field.Enum...)
+		if field.BooleanDisplay != nil {
+			booleanDisplay := *field.BooleanDisplay
+			clone.Fields[index].BooleanDisplay = &booleanDisplay
+		}
 		if field.Lookup != nil {
 			lookup := *field.Lookup
 			lookup.Dependencies = append([]FieldKey(nil), field.Lookup.Dependencies...)
+			lookup.FixedFilters = cloneFixedLookupFilters(field.Lookup.FixedFilters)
 			clone.Fields[index].Lookup = &lookup
 		}
 	}
 	clone.Details = append([]DetailDefinition(nil), definition.Details...)
-	clone.List.Columns = append([]FieldKey(nil), definition.List.Columns...)
-	clone.List.Searchable = append([]FieldKey(nil), definition.List.Searchable...)
-	clone.List.Sortable = append([]FieldKey(nil), definition.List.Sortable...)
-	clone.List.DefaultSort = append([]Sort(nil), definition.List.DefaultSort...)
-	clone.List.Pagination.AllowedSizes = append([]uint16(nil), definition.List.Pagination.AllowedSizes...)
+	clone.Grid.Columns = append([]FieldKey(nil), definition.Grid.Columns...)
+	clone.Grid.Searchable = append([]FieldKey(nil), definition.Grid.Searchable...)
+	clone.Grid.Sortable = append([]FieldKey(nil), definition.Grid.Sortable...)
+	clone.Grid.DefaultSort = append([]Sort(nil), definition.Grid.DefaultSort...)
+	clone.Grid.Pagination.AllowedSizes = append([]uint16(nil), definition.Grid.Pagination.AllowedSizes...)
+	clone.Form.Fields = append([]FieldKey(nil), definition.Form.Fields...)
+	if len(definition.fieldPatterns) != 0 {
+		clone.fieldPatterns = make(map[FieldKey]*regexp.Regexp, len(definition.fieldPatterns))
+		for key, pattern := range definition.fieldPatterns {
+			clone.fieldPatterns[key] = pattern
+		}
+	}
 	return clone
 }

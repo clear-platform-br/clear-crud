@@ -2,6 +2,8 @@ package crud
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -62,15 +64,102 @@ func (service *Service) Lookup(ctx context.Context, key ResourceKey, fieldKey Fi
 	if err != nil {
 		return LookupPage{}, err
 	}
-	page, err := state.definition.Source.Lookup(ctx, state.scope, normalized)
+	target := state
+	if field.Lookup.Resource != key {
+		if _, exists := service.registry.Get(field.Lookup.Resource); exists {
+			target, err = service.resolveRead(ctx, field.Lookup.Resource)
+			if err != nil {
+				return LookupPage{}, err
+			}
+		}
+	}
+	normalized.Resource = field.Lookup.Resource
+	normalized.ValueField = field.Lookup.ValueField
+	normalized.LabelField = field.Lookup.LabelField
+	normalized.FixedFilters = cloneFixedLookupFilters(field.Lookup.FixedFilters)
+	cacheKey := lookupCacheKey(key, fieldKey, target, normalized)
+	page, err := service.loadLookup(ctx, cacheKey, target, normalized)
 	if err != nil {
 		return LookupPage{}, unavailable(err)
 	}
 	return sanitizeLookupPage(page), nil
 }
 
+type lookupFlight struct {
+	done chan struct{}
+	page LookupPage
+	err  error
+}
+
+func (service *Service) loadLookup(ctx context.Context, cacheKey string, state readState, query LookupQuery) (LookupPage, error) {
+	if page, ok := service.lookupCache.Get(cacheKey); ok {
+		return page, nil
+	}
+	service.lookupMu.Lock()
+	if flight, ok := service.lookupFlights[cacheKey]; ok {
+		service.lookupMu.Unlock()
+		select {
+		case <-flight.done:
+			return flight.page, flight.err
+		case <-ctx.Done():
+			return LookupPage{}, ctx.Err()
+		}
+	}
+	flight := &lookupFlight{done: make(chan struct{})}
+	service.lookupFlights[cacheKey] = flight
+	service.lookupMu.Unlock()
+
+	page, err := state.definition.Source.Lookup(ctx, state.scope, query)
+	if err == nil {
+		page = sanitizeLookupPage(page)
+		service.lookupCache.Set(cacheKey, page)
+	}
+	service.lookupMu.Lock()
+	flight.page, flight.err = page, err
+	delete(service.lookupFlights, cacheKey)
+	close(flight.done)
+	service.lookupMu.Unlock()
+	return page, err
+}
+
+func lookupCacheKey(parent ResourceKey, field FieldKey, state readState, query LookupQuery) string {
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "%s|%s|%s|%s|%s|%d|%s", parent, field, query.Resource, query.ValueField, query.LabelField, query.Size, query.Cursor)
+	builder.WriteString("|q=")
+	builder.WriteString(query.Search)
+	if state.definition.Scope.Mode != ScopeModeGlobal {
+		keys := make([]string, 0, len(state.definition.Scope.Keys))
+		for key := range state.scope {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			fmt.Fprintf(&builder, "|s:%s=%T:%v", key, state.scope[key], state.scope[key])
+		}
+	}
+	keys := make([]string, 0, len(query.Dependencies))
+	for key := range query.Dependencies {
+		keys = append(keys, string(key))
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		value := query.Dependencies[FieldKey(key)]
+		fmt.Fprintf(&builder, "|d:%s=%T:%v", key, value, value)
+	}
+	for _, filter := range query.FixedFilters {
+		fmt.Fprintf(&builder, "|f:%s", filter.Field)
+		for _, value := range filter.Values {
+			fmt.Fprintf(&builder, "=%T:%v", value, value)
+		}
+	}
+	return builder.String()
+}
+
 func normalizeQuery(ctx context.Context, definition Definition, query Query) (Query, error) {
-	normalized := Query{Search: strings.TrimSpace(query.Search)}
+	if query.IncludeArchived && definition.Grid.ArchiveVisibility != ArchiveVisibilityActiveAndArchived {
+		return Query{}, publicError(ErrorInvalidRequest, "crud.error.invalid_request", nil)
+	}
+	normalized := Query{Search: strings.TrimSpace(query.Search), IncludeArchived: query.IncludeArchived}
 	if len(query.Filters) > maxQueryFilters || len(query.Sort) > maxQuerySortTerms ||
 		tooLong(normalized.Search, maxQuerySearchRunes) || len(query.Page.Cursor) > maxCursorBytes {
 		return Query{}, publicError(ErrorInvalidRequest, "crud.error.invalid_request", nil)
@@ -80,8 +169,7 @@ func normalizeQuery(ctx context.Context, definition Definition, query Query) (Qu
 	}
 	for _, filter := range query.Filters {
 		field, ok := findField(definition.Fields, filter.Field)
-		if !ok || field.Sensitive || !filterAllowed(field.Type, filter.Operator) || !allowedValue(filter.Value) ||
-			(filter.Operator == FilterIsNull && filter.Value != nil) {
+		if !ok || field.Sensitive || !filterAllowed(field.Type, filter.Operator) || !validFilterShape(filter) {
 			return Query{}, publicError(ErrorInvalidRequest, "crud.error.invalid_request", nil)
 		}
 		normalized.Filters = append(normalized.Filters, filter)
@@ -91,7 +179,7 @@ func normalizeQuery(ctx context.Context, definition Definition, query Query) (Qu
 		return Query{}, err
 	}
 	normalized.Sort = sort
-	page, err := normalizePage(definition.List.Pagination, query.Page)
+	page, err := normalizePage(definition.Grid.Pagination, query.Page)
 	if err != nil {
 		return Query{}, err
 	}
@@ -101,10 +189,10 @@ func normalizeQuery(ctx context.Context, definition Definition, query Query) (Qu
 
 func normalizeSort(definition Definition, sort []Sort) ([]Sort, error) {
 	if len(sort) == 0 {
-		sort = definition.List.DefaultSort
+		sort = definition.Grid.DefaultSort
 	}
-	allowed := make(map[FieldKey]struct{}, len(definition.List.Sortable))
-	for _, field := range definition.List.Sortable {
+	allowed := make(map[FieldKey]struct{}, len(definition.Grid.Sortable))
+	for _, field := range definition.Grid.Sortable {
 		allowed[field] = struct{}{}
 	}
 	normalized := make([]Sort, 0, len(sort)+1)
@@ -175,7 +263,7 @@ func normalizeLookup(definition *LookupDefinition, query LookupQuery) (LookupQue
 }
 
 func filterAllowed(fieldType FieldType, operator FilterOperator) bool {
-	if operator == FilterEqual || operator == FilterNotEqual || operator == FilterIsNull {
+	if operator == FilterEqual || operator == FilterNotEqual || operator == FilterIsNull || operator == FilterIn {
 		return true
 	}
 	switch fieldType {
@@ -186,6 +274,21 @@ func filterAllowed(fieldType FieldType, operator FilterOperator) bool {
 	default:
 		return false
 	}
+}
+
+func validFilterShape(filter Filter) bool {
+	if filter.Operator == FilterIn {
+		if filter.Value != nil || len(filter.Values) == 0 || len(filter.Values) > 100 {
+			return false
+		}
+		for _, value := range filter.Values {
+			if !allowedValue(value) {
+				return false
+			}
+		}
+		return true
+	}
+	return len(filter.Values) == 0 && allowedValue(filter.Value) && (filter.Operator != FilterIsNull || filter.Value == nil)
 }
 
 func sanitizePage(definition Definition, page Page) Page {

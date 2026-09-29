@@ -33,6 +33,9 @@ func NewIdentifier(value string) (Identifier, error) {
 type TableDefinition struct {
 	Table    Identifier
 	IDColumn Identifier
+	// Global marks an explicitly read-only reference table with no tenant
+	// columns. It is never inferred from a table name.
+	Global bool
 	// IDField optionally maps a create-only public field to IDColumn. Without
 	// it, SQLite generates the opaque record ID.
 	IDField       crud.FieldKey
@@ -113,6 +116,7 @@ func (source *SimpleTable) Capabilities(context.Context) crud.Capabilities {
 		crud.CapabilityContainsSearch: {},
 		crud.CapabilityArchive:        {},
 		crud.CapabilityHardDelete:     {},
+		crud.CapabilityLookup:         {},
 	}
 }
 
@@ -181,6 +185,9 @@ func (source *SimpleTable) Get(ctx context.Context, scope crud.Scope, id crud.Re
 
 // Create inserts a full mutation and reads the generated opaque record ID.
 func (source *SimpleTable) Create(ctx context.Context, scope crud.Scope, mutation crud.Mutation) (crud.Record, error) {
+	if source.table.Global {
+		return crud.Record{}, public(crud.ErrorInvalidRequest)
+	}
 	columns, values, args, err := source.mutationValues(scope, mutation, crud.ActionCreate)
 	if err != nil {
 		return crud.Record{}, err
@@ -209,6 +216,9 @@ func (source *SimpleTable) Create(ctx context.Context, scope crud.Scope, mutatio
 
 // Update replaces a full mutation only while its version matches.
 func (source *SimpleTable) Update(ctx context.Context, scope crud.Scope, id crud.RecordID, version crud.Version, mutation crud.Mutation) (crud.Record, error) {
+	if source.table.Global {
+		return crud.Record{}, public(crud.ErrorInvalidRequest)
+	}
 	_, _, allArgs, err := source.mutationValues(scope, mutation, crud.ActionUpdate)
 	if err != nil {
 		return crud.Record{}, err
@@ -241,6 +251,9 @@ func (source *SimpleTable) Update(ctx context.Context, scope crud.Scope, id crud
 
 // Delete archives or physically deletes one versioned record.
 func (source *SimpleTable) Delete(ctx context.Context, scope crud.Scope, id crud.RecordID, version crud.Version, mode crud.DeleteMode) error {
+	if source.table.Global {
+		return public(crud.ErrorDeleteRestricted)
+	}
 	if mode == crud.DeleteModeNone {
 		return public(crud.ErrorDeleteRestricted)
 	}
@@ -273,6 +286,11 @@ func (source *SimpleTable) Delete(ctx context.Context, scope crud.Scope, id crud
 	}
 	result, err := source.executor(ctx).ExecContext(ctx, statement, args...)
 	if err != nil {
+		if mode == crud.DeleteModeHardDelete && isForeignKeyViolation(err) {
+			// Referential integrity belongs to the database. Do not issue a
+			// preflight SELECT: it would add latency and still race the DELETE.
+			return public(crud.ErrorDeleteRestricted)
+		}
 		return err
 	}
 	changed, err := result.RowsAffected()
@@ -285,10 +303,118 @@ func (source *SimpleTable) Delete(ctx context.Context, scope crud.Scope, id crud
 	return nil
 }
 
-// Lookup is not part of SQLite simple_table v0.1; resources with lookups use
-// the dedicated SQL resource adapter added in a later increment.
-func (source *SimpleTable) Lookup(context.Context, crud.Scope, crud.LookupQuery) (crud.LookupPage, error) {
-	return crud.LookupPage{}, public(crud.ErrorInvalidRequest)
+// Lookup returns bounded value/label pairs from this server-registered table.
+// The target columns and dependency fields arrive only from Service, never
+// from the HTTP request.
+func (source *SimpleTable) Lookup(ctx context.Context, scope crud.Scope, query crud.LookupQuery) (crud.LookupPage, error) {
+	if query.ValueField == "" || query.LabelField == "" || query.Size == 0 || query.Size > 100 {
+		return crud.LookupPage{}, public(crud.ErrorInvalidRequest)
+	}
+	valueColumn, ok := source.lookupColumn(query.ValueField, true)
+	if !ok {
+		return crud.LookupPage{}, public(crud.ErrorInvalidRequest)
+	}
+	labelColumn, ok := source.lookupColumn(query.LabelField, false)
+	if !ok {
+		return crud.LookupPage{}, public(crud.ErrorInvalidRequest)
+	}
+	where, args, err := source.scopeWhere(scope)
+	if err != nil {
+		return crud.LookupPage{}, err
+	}
+	activeWhere, activeArgs := source.activeWhere()
+	where += activeWhere
+	args = append(args, activeArgs...)
+	keys := make([]string, 0, len(query.Dependencies))
+	for key := range query.Dependencies {
+		keys = append(keys, string(key))
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		column, ok := source.table.Fields[crud.FieldKey(key)]
+		if !ok {
+			return crud.LookupPage{}, public(crud.ErrorInvalidRequest)
+		}
+		where += " AND " + quote(column) + " = ?"
+		args = append(args, query.Dependencies[crud.FieldKey(key)])
+	}
+	for _, filter := range query.FixedFilters {
+		column, ok := source.table.Fields[filter.Field]
+		if !ok || len(filter.Values) == 0 || len(filter.Values) > 100 {
+			return crud.LookupPage{}, public(crud.ErrorInvalidRequest)
+		}
+		for _, value := range filter.Values {
+			if !lookupFilterValue(value) {
+				return crud.LookupPage{}, public(crud.ErrorInvalidRequest)
+			}
+		}
+		if len(filter.Values) == 1 {
+			where += " AND " + quote(column) + " = ?"
+			args = append(args, filter.Values[0])
+			continue
+		}
+		where += " AND " + quote(column) + " IN (" + lookupPlaceholders(len(filter.Values)) + ")"
+		args = append(args, filter.Values...)
+	}
+	if query.Search != "" {
+		where += " AND (LOWER(CAST(" + quote(labelColumn) + " AS TEXT)) LIKE LOWER(?) OR CAST(" + quote(valueColumn) + " AS TEXT) = ?)"
+		args = append(args, "%"+query.Search+"%", query.Search)
+	}
+	offset := uint64(0)
+	if query.Cursor != "" {
+		parsed, parseErr := strconv.ParseUint(query.Cursor, 10, 63)
+		if parseErr != nil {
+			return crud.LookupPage{}, public(crud.ErrorInvalidRequest)
+		}
+		offset = parsed
+	}
+	if offset > uint64(1<<63-1)-uint64(query.Size) {
+		return crud.LookupPage{}, public(crud.ErrorInvalidRequest)
+	}
+	statement := "SELECT " + quote(valueColumn) + ", " + quote(labelColumn) + " FROM " + quote(source.table.Table) + " WHERE " + where + " ORDER BY " + quote(labelColumn) + " ASC, " + quote(valueColumn) + " ASC LIMIT ? OFFSET ?"
+	args = append(args, int64(query.Size), int64(offset))
+	rows, err := source.executor(ctx).QueryContext(ctx, statement, args...)
+	if err != nil {
+		return crud.LookupPage{}, err
+	}
+	defer rows.Close()
+	options := make([]crud.LookupOption, 0, query.Size)
+	for rows.Next() {
+		var value, label any
+		if err := rows.Scan(&value, &label); err != nil {
+			return crud.LookupPage{}, err
+		}
+		options = append(options, crud.LookupOption{Value: sqlValue(value), Label: stringValue(label)})
+	}
+	if err := rows.Err(); err != nil {
+		return crud.LookupPage{}, err
+	}
+	page := crud.LookupPage{Options: options}
+	if len(options) == int(query.Size) {
+		page.NextCursor = strconv.FormatUint(offset+uint64(query.Size), 10)
+	}
+	return page, nil
+}
+
+func lookupFilterValue(value crud.Value) bool {
+	switch value.(type) {
+	case string, bool, int64:
+		return true
+	default:
+		return false
+	}
+}
+
+func lookupPlaceholders(count int) string {
+	return strings.TrimSuffix(strings.Repeat("?,", count), ",")
+}
+
+func (source *SimpleTable) lookupColumn(field crud.FieldKey, allowID bool) (Identifier, bool) {
+	if allowID && field == "id" {
+		return source.table.IDColumn, true
+	}
+	column, ok := source.table.Fields[field]
+	return column, ok
 }
 
 type executor interface {
@@ -307,8 +433,11 @@ func (source *SimpleTable) executor(ctx context.Context) executor {
 }
 
 func validateTable(table TableDefinition) error {
-	if table.Table == "" || table.IDColumn == "" || table.VersionColumn == "" || len(table.ScopeColumns) == 0 || len(table.Fields) == 0 {
+	if table.Table == "" || table.IDColumn == "" || table.VersionColumn == "" || len(table.Fields) == 0 || !table.Global && len(table.ScopeColumns) == 0 {
 		return fmt.Errorf("sqladapter: table, id, version, scope and fields are required")
+	}
+	if table.Global && len(table.ScopeColumns) != 0 {
+		return fmt.Errorf("sqladapter: global table cannot declare scope columns")
 	}
 	if table.IDField != "" && table.Fields[table.IDField] != table.IDColumn {
 		return fmt.Errorf("sqladapter: id field must map to id column")
@@ -385,13 +514,23 @@ func (source *SimpleTable) where(scope crud.Scope, query crud.Query) (string, []
 	if err != nil {
 		return "", nil, err
 	}
-	activeWhere, activeArgs := source.activeWhere()
-	where += activeWhere
-	args = append(args, activeArgs...)
+	if !query.IncludeArchived {
+		activeWhere, activeArgs := source.activeWhere()
+		where += activeWhere
+		args = append(args, activeArgs...)
+	}
 	for _, filter := range query.Filters {
 		column, ok := source.table.Fields[filter.Field]
 		if !ok {
 			return "", nil, public(crud.ErrorInvalidRequest)
+		}
+		if filter.Operator == crud.FilterIn {
+			if len(filter.Values) == 0 || len(filter.Values) > 100 {
+				return "", nil, public(crud.ErrorInvalidRequest)
+			}
+			where += " AND " + quote(column) + " IN (" + lookupPlaceholders(len(filter.Values)) + ")"
+			args = append(args, filter.Values...)
+			continue
 		}
 		operator, ok := filterOperator(filter.Operator)
 		if !ok {
@@ -418,6 +557,12 @@ func (source *SimpleTable) where(scope crud.Scope, query crud.Query) (string, []
 }
 
 func (source *SimpleTable) scopeWhere(scope crud.Scope) (string, []any, error) {
+	if len(source.table.ScopeColumns) == 0 {
+		if !source.table.Global {
+			return "", nil, public(crud.ErrorForbidden)
+		}
+		return "1=1", nil, nil
+	}
 	keys := make([]string, 0, len(source.table.ScopeColumns))
 	for key := range source.table.ScopeColumns {
 		if scope[key] == "" {
@@ -460,6 +605,9 @@ func (source *SimpleTable) selectColumns() string {
 	columns := []string{quote(source.table.IDColumn), quote(source.table.VersionColumn)}
 	for _, field := range source.fieldColumns() {
 		columns = append(columns, quote(field))
+	}
+	if column, _, _, ok := source.archiveState(); ok {
+		columns = append(columns, quote(column))
 	}
 	return strings.Join(columns, ", ")
 }
@@ -654,6 +802,10 @@ func (source *SimpleTable) scanRecord(row scanner) (crud.Record, error) {
 	for index := range values {
 		destinations = append(destinations, &values[index])
 	}
+	var archiveValue any
+	if _, _, _, ok := source.archiveState(); ok {
+		destinations = append(destinations, &archiveValue)
+	}
 	if err := row.Scan(destinations...); err != nil {
 		return crud.Record{}, err
 	}
@@ -661,7 +813,55 @@ func (source *SimpleTable) scanRecord(row scanner) (crud.Record, error) {
 	for index, key := range keys {
 		fields[key] = sqlValue(values[index])
 	}
-	return crud.Record{ID: crud.RecordID(stringValue(id)), Version: crud.Version(version), Fields: fields}, nil
+	return crud.Record{ID: crud.RecordID(stringValue(id)), Version: crud.Version(version), Fields: fields, Archived: source.isArchivedValue(archiveValue)}, nil
+}
+
+func (source *SimpleTable) isArchivedValue(value any) bool {
+	_, active, archived, ok := source.archiveState()
+	if !ok {
+		return false
+	}
+	value = sqlValue(value)
+	if source.table.ArchiveColumn != nil {
+		switch typed := value.(type) {
+		case nil:
+			return false
+		case bool:
+			return typed
+		case int64:
+			return typed != 0
+		case int:
+			return typed != 0
+		default:
+			return stringValue(typed) != "0" && stringValue(typed) != ""
+		}
+	}
+	return archiveValuesEqual(value, archived) && !archiveValuesEqual(value, active)
+}
+
+func archiveValuesEqual(left, right any) bool {
+	left = sqlValue(left)
+	right = sqlValue(right)
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	if leftBool, ok := left.(bool); ok {
+		rightBool, rightOK := right.(bool)
+		return rightOK && leftBool == rightBool
+	}
+	if rightBool, ok := right.(bool); ok {
+		leftBool, leftOK := left.(bool)
+		return leftOK && leftBool == rightBool
+	}
+	if leftInteger, ok := left.(int64); ok {
+		rightInteger, rightOK := right.(int64)
+		return rightOK && leftInteger == rightInteger
+	}
+	if rightInteger, ok := right.(int64); ok {
+		leftInteger, leftOK := left.(int64)
+		return leftOK && leftInteger == rightInteger
+	}
+	return fmt.Sprint(left) == fmt.Sprint(right)
 }
 
 func filterOperator(operator crud.FilterOperator) (string, bool) {
@@ -689,10 +889,23 @@ func filterOperator(operator crud.FilterOperator) (string, bool) {
 	}
 }
 
-func quote(identifier Identifier) string { return `"` + string(identifier) + `"` }
+func quote(identifier Identifier) string { return quoteRaw(string(identifier)) }
+
+func quoteRaw(identifier string) string { return `"` + strings.ReplaceAll(identifier, `"`, `""`) + `"` }
+
 func public(code crud.ErrorCode) *crud.Error {
 	return &crud.Error{Code: code, Message: crud.MessageCode("crud.error." + string(code))}
 }
+
+func isForeignKeyViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "foreign key constraint failed") ||
+		strings.Contains(message, "foreign key constraint violation")
+}
+
 func stringValue(value any) string {
 	if bytes, ok := value.([]byte); ok {
 		return string(bytes)

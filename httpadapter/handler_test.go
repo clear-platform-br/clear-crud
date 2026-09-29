@@ -72,7 +72,7 @@ func TestHandlerRouteHelpers(t *testing.T) {
 	cases := []struct {
 		method, path, body string
 		want               int
-	}{{http.MethodGet, "/api/v1/crud/contacts/records/1", "", 200}, {http.MethodPut, "/api/v1/crud/contacts/records/1", `{"version":1,"fields":{"name":"A","age":2}}`, 200}, {http.MethodDelete, "/api/v1/crud/contacts/records/1", `{"version":1,"fields":{}}`, 204}, {http.MethodGet, "/api/v1/crud/contacts/lookups/name?size=bad", "", 400}, {http.MethodPatch, "/api/v1/crud/contacts/records", "", 400}, {http.MethodGet, "/wrong", "", 404}}
+	}{{http.MethodGet, "/api/v1/crud/contacts/records/1", "", 200}, {http.MethodPut, "/api/v1/crud/contacts/records/1", `{"version":1,"fields":{"name":"A","age":2}}`, 200}, {http.MethodDelete, "/api/v1/crud/contacts/records/1", `{"version":1,"fields":{}}`, 204}, {http.MethodGet, "/api/v1/crud/contacts/lookups/name?size=bad", "", 400}, {http.MethodGet, "/api/v1/crud/contacts/records?include_archived=bad", "", 400}, {http.MethodPatch, "/api/v1/crud/contacts/records", "", 400}, {http.MethodGet, "/wrong", "", 404}}
 	for _, c := range cases {
 		r := httptest.NewRequest(c.method, c.path, strings.NewReader(c.body))
 		if c.body != "" {
@@ -101,7 +101,7 @@ func TestTransportHelpers(t *testing.T) {
 	if _, err := New(nil, Options{Translator: translator{}}); err == nil {
 		t.Fatal("nil service")
 	}
-	definition := crud.PublicDefinition{Fields: []crud.Field{{Key: "name", Type: crud.FieldString}, {Key: "age", Type: crud.FieldInteger}}}
+	definition := crud.PublicDefinition{Fields: []crud.Field{{Key: "name", Type: crud.FieldString}, {Key: "age", Type: crud.FieldInteger}, {Key: "category", Type: crud.FieldLookup}}}
 	h := testHandler(t, &source{})
 	for _, c := range []struct{ content, body string }{{"text/plain", `{}`}, {"application/json", `{"unknown":1}`}, {"application/json", `{} {}`}} {
 		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(c.body))
@@ -125,6 +125,10 @@ func TestTransportHelpers(t *testing.T) {
 	if err := normalizeFields(definition, crud.Fields{"name": json.Number("1")}); err == nil {
 		t.Fatal("string number")
 	}
+	lookupValue := crud.Fields{"category": json.Number("11")}
+	if err := normalizeFields(definition, lookupValue); err != nil || lookupValue["category"] != int64(11) {
+		t.Fatalf("lookup numeric value normalization = %#v, %v", lookupValue, err)
+	}
 	w := httptest.NewRecorder()
 	h.ok(w, httptest.NewRequest(http.MethodGet, "/", nil), 200, map[string]string{"a": "b"}, &crud.Page{Page: 1, Size: 1})
 	if w.Code != 200 {
@@ -139,6 +143,57 @@ func TestTransportHelpers(t *testing.T) {
 	h.writeError(w, httptest.NewRequest(http.MethodGet, "/", nil), errors.New("internal"))
 	if w.Code != 503 {
 		t.Fatal(w.Code)
+	}
+}
+
+func TestListQueryParsesTypedFilters(t *testing.T) {
+	definition := crud.PublicDefinition{Fields: []crud.Field{
+		{Key: "enabled", Type: crud.FieldBoolean},
+		{Key: "status", Type: crud.FieldEnum},
+		{Key: "age", Type: crud.FieldInteger},
+		{Key: "notes", Type: crud.FieldText},
+	}}
+	request := httptest.NewRequest(http.MethodGet, "/?filter.enabled.eq=false&filter.status.eq=review&filter.age.eq=42&filter.notes.is_null=", nil)
+	query, err := listQuery(request, definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(query.Filters) != 4 {
+		t.Fatalf("filters = %#v", query.Filters)
+	}
+	for _, filter := range query.Filters {
+		switch filter.Field {
+		case "enabled":
+			if filter.Operator != crud.FilterEqual || filter.Value != false {
+				t.Fatalf("boolean filter = %#v", filter)
+			}
+		case "status":
+			if filter.Operator != crud.FilterEqual || filter.Value != "review" {
+				t.Fatalf("enum filter = %#v", filter)
+			}
+		case "age":
+			if filter.Operator != crud.FilterEqual || filter.Value != int64(42) {
+				t.Fatalf("integer filter = %#v", filter)
+			}
+		case "notes":
+			if filter.Operator != crud.FilterIsNull || filter.Value != nil {
+				t.Fatalf("null filter = %#v", filter)
+			}
+		default:
+			t.Fatalf("unexpected filter = %#v", filter)
+		}
+	}
+	if _, err := listQuery(httptest.NewRequest(http.MethodGet, "/?filter.missing.eq=x", nil), definition); err == nil {
+		t.Fatal("unknown filter field accepted")
+	}
+	inQuery, err := listQuery(httptest.NewRequest(http.MethodGet, "/?filter.status.in=review&filter.status.in=closed", nil), definition)
+	if err != nil || len(inQuery.Filters) != 1 || inQuery.Filters[0].Operator != crud.FilterIn || len(inQuery.Filters[0].Values) != 2 || inQuery.Filters[0].Values[1] != "closed" {
+		t.Fatalf("IN filter = %#v, %v", inQuery.Filters, err)
+	}
+	for _, queryString := range []string{"filter.age.eq=bad", "filter.notes.is_null=x", "filter.status.eq=a&filter.status.eq=b", "filter.age.eq=1&unexpected=x"} {
+		if _, err := listQuery(httptest.NewRequest(http.MethodGet, "/?"+queryString, nil), definition); err == nil {
+			t.Fatalf("invalid filter accepted: %s", queryString)
+		}
 	}
 }
 
@@ -197,6 +252,26 @@ func TestFullHTTPMatrix(t *testing.T) {
 	}
 }
 
+func TestLookupQueryParsesOnlyDeclaredDependencies(t *testing.T) {
+	definition := crud.PublicDefinition{Fields: []crud.Field{{Key: "category", Lookup: &crud.LookupDefinition{Resource: "categories", ValueField: "id", LabelField: "name", Dependencies: []crud.FieldKey{"active"}, PageSize: 25}}}}
+	query, err := lookupQuery(httptest.NewRequest(http.MethodGet, "/?depends.active=true", nil), definition, "category")
+	if err != nil || query.Dependencies["active"] != true {
+		t.Fatalf("lookupQuery() = %#v, %v", query, err)
+	}
+	if _, err := lookupQuery(httptest.NewRequest(http.MethodGet, "/?depends.other=1", nil), definition, "category"); err == nil {
+		t.Fatal("undeclared dependency accepted")
+	}
+	if _, err := lookupQuery(httptest.NewRequest(http.MethodGet, "/?depends.active=1&depends.active=2", nil), definition, "category"); err == nil {
+		t.Fatal("duplicate dependency accepted")
+	}
+	for raw, want := range map[string]crud.Value{"false": false, "42": int64(42), "text": "text"} {
+		got, ok := lookupScalar(raw)
+		if !ok || got != want {
+			t.Fatalf("lookupScalar(%q) = %#v, %v; want %#v", raw, got, ok, want)
+		}
+	}
+}
+
 func TestMutationDetailsUseOnlyDeclaredChildFields(t *testing.T) {
 	definition := crud.PublicDefinition{
 		Fields: []crud.Field{{Key: "name", Type: crud.FieldString}},
@@ -232,15 +307,17 @@ func TestMutationDetailsUseOnlyDeclaredChildFields(t *testing.T) {
 type source struct {
 	creates int
 	err     error
+	query   crud.Query
 }
 
 func (s *source) Capabilities(context.Context) crud.Capabilities {
 	return crud.Capabilities{crud.CapabilityOffsetPage: {}, crud.CapabilityTotalCount: {}, crud.CapabilityAtomicVersion: {}, crud.CapabilityUnitOfWork: {}, crud.CapabilityArchive: {}, crud.CapabilityLookup: {}}
 }
-func (s *source) List(context.Context, crud.Scope, crud.Query) (crud.Page, error) {
+func (s *source) List(_ context.Context, _ crud.Scope, query crud.Query) (crud.Page, error) {
 	if s.err != nil {
 		return crud.Page{}, s.err
 	}
+	s.query = query
 	n := uint64(0)
 	return crud.Page{Page: 1, Size: 25, Total: &n}, nil
 }
@@ -313,7 +390,7 @@ type clock struct{}
 func (clock) Now() time.Time { return time.Unix(0, 0) }
 func testHandler(t *testing.T, source *source) *Handler {
 	t.Helper()
-	definition := crud.Definition{Contract: crud.ContractDefinitionV1, Key: "contacts", Labels: crud.Labels{Title: "contacts", Singular: "contact"}, Scope: crud.ScopeRequirements{Keys: []string{"tenant_id"}}, Permissions: crud.Permissions{Read: "r", Create: "c", Update: "u", Delete: "d"}, Fields: []crud.Field{{Key: "name", Label: "name", Type: crud.FieldString, Visible: true}, {Key: "age", Label: "age", Type: crud.FieldInteger, Visible: true}, {Key: "category", Label: "category", Type: crud.FieldLookup, Visible: true, Lookup: &crud.LookupDefinition{Resource: "categories", ValueField: "id", LabelField: "name", PageSize: 25}}}, List: crud.ListDefinition{Columns: []crud.FieldKey{"name"}, Searchable: []crud.FieldKey{"name"}, Sortable: []crud.FieldKey{"name"}, DefaultSort: []crud.Sort{{Field: "name", Direction: crud.SortAscending}}, Pagination: crud.PaginationDefinition{Mode: crud.PageModeOffset, DefaultSize: 25, AllowedSizes: []uint16{25, 50, 100}, Total: true}}, Presentation: crud.Presentation{Collection: crud.CollectionAuto, Density: crud.DensityCompact}, Source: source, UOW: uow{}, Delete: crud.DeletePolicy{Mode: crud.DeleteModeArchive}, Concurrency: crud.ConcurrencyPolicy{Mode: crud.ConcurrencyVersion}}
+	definition := crud.Definition{Contract: crud.ContractDefinitionV1, Key: "contacts", Labels: crud.Labels{Title: "contacts", Singular: "contact"}, Scope: crud.ScopeRequirements{Keys: []string{"tenant_id"}}, Permissions: crud.Permissions{Read: "r", Create: "c", Update: "u", Delete: "d"}, Fields: []crud.Field{{Key: "name", Label: "name", Type: crud.FieldString, Optional: true, Visible: true}, {Key: "age", Label: "age", Type: crud.FieldInteger, Optional: true, Visible: true}, {Key: "category", Label: "category", Type: crud.FieldLookup, Optional: true, Visible: true, Lookup: &crud.LookupDefinition{Resource: "categories", ValueField: "id", LabelField: "name", PageSize: 25}}}, Grid: crud.GridDefinition{Columns: []crud.FieldKey{"name"}, Searchable: []crud.FieldKey{"name"}, Sortable: []crud.FieldKey{"name"}, DefaultSort: []crud.Sort{{Field: "name", Direction: crud.SortAscending}}, Pagination: crud.PaginationDefinition{Mode: crud.PageModeOffset, DefaultSize: 25, AllowedSizes: []uint16{25, 50, 100}, Total: true}}, Presentation: crud.Presentation{Collection: crud.CollectionAuto, Density: crud.DensityCompact}, Source: source, UOW: uow{}, Delete: crud.DeletePolicy{Mode: crud.DeleteModeArchive}, Concurrency: crud.ConcurrencyPolicy{Mode: crud.ConcurrencyVersion}}
 	registry := crud.NewRegistry()
 	if err := registry.Register(context.Background(), definition); err != nil {
 		t.Fatal(err)

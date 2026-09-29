@@ -43,3 +43,7 @@ O contrato canônico é governado no repositório `clear_platform` pelos IDs:
 - Cada PR deve alterar uma fatia pequena e manter os contratos existentes
   compatíveis ou registrar nova major com guia de migração.
 - Adapters executam a suíte de conformidade; mocks não substituem banco real.
+- Ao concluir cada fatia, atualizar sistematicamente o manual de uso
+  (`docs/agent-usage.md`) e o backlog (`docs/backlog.md`). O handover atual é
+  um snapshot para a troca de chat e só deve ser criado ou atualizado nesse
+  momento, nunca como diário da execução.

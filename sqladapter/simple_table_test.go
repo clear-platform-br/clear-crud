@@ -30,6 +30,57 @@ func TestNewIdentifier(t *testing.T) {
 	}
 }
 
+func TestSimpleTableArchiveMetadataNormalizesConventionalValues(t *testing.T) {
+	source := &SimpleTable{table: sqliteTable()}
+	for _, test := range []struct {
+		name     string
+		value    any
+		archived bool
+	}{
+		{name: "nil", value: nil},
+		{name: "false", value: false},
+		{name: "true", value: true, archived: true},
+		{name: "zero integer", value: int64(0)},
+		{name: "nonzero integer", value: int64(1), archived: true},
+		{name: "zero native integer", value: int(0)},
+		{name: "nonzero native integer", value: int(2), archived: true},
+		{name: "zero text", value: "0"},
+		{name: "nonzero text", value: "1", archived: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := source.isArchivedValue(test.value); got != test.archived {
+				t.Fatalf("isArchivedValue(%#v) = %v, want %v", test.value, got, test.archived)
+			}
+		})
+	}
+
+	state := sqliteTable()
+	state.ArchiveColumn = nil
+	state.ArchiveState = &ArchiveState{Column: mustIdentifier("status"), ActiveValue: "active", ArchivedValue: "archived"}
+	stateSource := &SimpleTable{table: state}
+	for _, test := range []struct {
+		value    any
+		archived bool
+	}{
+		{value: "active"},
+		{value: "archived", archived: true},
+		{value: "other"},
+	} {
+		if got := stateSource.isArchivedValue(test.value); got != test.archived {
+			t.Fatalf("state isArchivedValue(%#v) = %v, want %v", test.value, got, test.archived)
+		}
+	}
+	if !archiveValuesEqual(int64(4), int64(4)) || archiveValuesEqual(int64(4), int64(5)) {
+		t.Fatal("integer archive values were compared incorrectly")
+	}
+	if !archiveValuesEqual(true, true) || archiveValuesEqual(true, false) {
+		t.Fatal("boolean archive values were compared incorrectly")
+	}
+	if !archiveValuesEqual(nil, nil) || archiveValuesEqual(nil, "") {
+		t.Fatal("nil archive values were compared incorrectly")
+	}
+}
+
 func TestNewSimpleTableRejectsInvalidConfig(t *testing.T) {
 	database, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
@@ -112,6 +163,10 @@ func TestSimpleTableSupportsDeclaredIdentityStateArchiveAndManagedColumns(t *tes
 	}
 	_, err = source.Get(context.Background(), scope, created.ID)
 	requireCode(t, err, crud.ErrorNotFound)
+	archivedPage, err := source.List(context.Background(), scope, crud.Query{IncludeArchived: true, Page: crud.PageRequest{Mode: crud.PageModeOffset, Number: 1, Size: 10}})
+	if err != nil || len(archivedPage.Records) != 1 || !archivedPage.Records[0].Archived || archivedPage.Records[0].Fields["name"] != "Ana Maria" {
+		t.Fatalf("List(include archived) = %#v, %v", archivedPage, err)
+	}
 	_, err = source.Create(context.Background(), crud.Scope{"tenant_id": "tenant-a"}, crud.Mutation{Fields: crud.Fields{"code": "contact-65", "name": "Bia"}})
 	requireCode(t, err, crud.ErrorForbidden)
 }
@@ -129,6 +184,7 @@ func TestSimpleTableQueryAndPolicies(t *testing.T) {
 	queries := []crud.Query{
 		{Search: "an", Page: crud.PageRequest{Mode: crud.PageModeOffset, Number: 1, Size: 10}},
 		{Filters: []crud.Filter{{Field: "name", Operator: crud.FilterEqual, Value: "Ana"}}, Page: crud.PageRequest{Mode: crud.PageModeOffset, Number: 1, Size: 10}},
+		{Filters: []crud.Filter{{Field: "name", Operator: crud.FilterIn, Values: []crud.Value{"Ana", "Bruno"}}}, Page: crud.PageRequest{Mode: crud.PageModeOffset, Number: 1, Size: 10}},
 		{Filters: []crud.Filter{{Field: "name", Operator: crud.FilterNotEqual, Value: "Ana"}}, Page: crud.PageRequest{Mode: crud.PageModeOffset, Number: 1, Size: 10}},
 		{Filters: []crud.Filter{{Field: "name", Operator: crud.FilterContains, Value: "r"}}, Page: crud.PageRequest{Mode: crud.PageModeOffset, Number: 1, Size: 10}},
 		{Filters: []crud.Filter{{Field: "name", Operator: crud.FilterPrefix, Value: "A"}}, Sort: []crud.Sort{{Field: "name", Direction: crud.SortDescending}}, Page: crud.PageRequest{Mode: crud.PageModeOffset, Number: 1, Size: 10}},
@@ -159,6 +215,138 @@ func TestSimpleTableQueryAndPolicies(t *testing.T) {
 	}
 	requireCode(t, plain.Delete(ctx, fixture.ScopeA, record.ID, record.Version, crud.DeleteModeArchive), crud.ErrorDeleteRestricted)
 	requireCode(t, plain.Delete(ctx, fixture.ScopeA, record.ID, record.Version+1, crud.DeleteModeHardDelete), crud.ErrorConflict)
+}
+
+func TestSimpleTableHardDeleteLetsTheDatabaseEnforceForeignKeys(t *testing.T) {
+	database, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	database.SetMaxOpenConns(1)
+	if _, err := database.Exec(`PRAGMA foreign_keys = ON;
+        CREATE TABLE parents (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, name TEXT NOT NULL, version INTEGER NOT NULL);
+        CREATE TABLE children (id INTEGER PRIMARY KEY AUTOINCREMENT, parent_id INTEGER NOT NULL REFERENCES parents(id), note TEXT NOT NULL);`); err != nil {
+		t.Fatal(err)
+	}
+	source, err := NewSimpleTable(database, TableDefinition{
+		Table: mustIdentifier("parents"), IDColumn: mustIdentifier("id"), VersionColumn: mustIdentifier("version"),
+		ScopeColumns: map[string]Identifier{"tenant_id": mustIdentifier("tenant_id")},
+		Fields:       map[crud.FieldKey]Identifier{"name": mustIdentifier("name")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := crud.Scope{"tenant_id": "tenant-a"}
+	parent, err := source.Create(context.Background(), scope, crud.Mutation{Fields: crud.Fields{"name": "parent"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`INSERT INTO children (parent_id, note) VALUES (?, 'dependent')`, parent.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := source.Delete(context.Background(), scope, parent.ID, parent.Version, crud.DeleteModeHardDelete); !errors.Is(err, &crud.Error{Code: crud.ErrorDeleteRestricted}) {
+		t.Fatalf("hard delete with dependent row = %v, want delete restricted", err)
+	}
+	if _, err := database.Exec(`DELETE FROM children WHERE parent_id = ?`, parent.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := source.Delete(context.Background(), scope, parent.ID, parent.Version, crud.DeleteModeHardDelete); err != nil {
+		t.Fatalf("hard delete after dependent removal = %v", err)
+	}
+}
+
+func TestForeignKeyViolationDetectionIsConservative(t *testing.T) {
+	if isForeignKeyViolation(nil) {
+		t.Fatal("nil error classified as foreign-key violation")
+	}
+	if !isForeignKeyViolation(errors.New("foreign key constraint violation")) {
+		t.Fatal("foreign-key violation message was not recognized")
+	}
+	if isForeignKeyViolation(errors.New("unique constraint failed")) {
+		t.Fatal("unrelated constraint classified as foreign-key violation")
+	}
+}
+
+func TestSimpleTableLookupUsesDeclaredDependenciesAndCursor(t *testing.T) {
+	database, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	database.SetMaxOpenConns(1)
+	if _, err := database.Exec(`CREATE TABLE reference_regions (
+        id INTEGER PRIMARY KEY, state_id INTEGER NOT NULL, name TEXT NOT NULL, version INTEGER NOT NULL
+    ); CREATE INDEX reference_regions_name ON reference_regions (name);
+    INSERT INTO reference_regions (id, state_id, name, version) VALUES (11, 1, 'Alpha', 1), (12, 1, 'Beta', 1), (21, 2, 'Gamma', 1)`); err != nil {
+		t.Fatal(err)
+	}
+	source, err := NewSimpleTable(database, TableDefinition{Table: mustIdentifier("reference_regions"), IDColumn: mustIdentifier("id"), VersionColumn: mustIdentifier("version"), Global: true, Fields: map[crud.FieldKey]Identifier{"state_id": "state_id", "name": "name"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := source.Lookup(context.Background(), crud.Scope{"tenant_id": "ignored"}, crud.LookupQuery{ValueField: "id", LabelField: "name", Search: "a", Size: 1, Dependencies: crud.Fields{"state_id": int64(1)}})
+	if err != nil || len(page.Options) != 1 || page.NextCursor == "" || page.Options[0].Value != int64(11) {
+		t.Fatalf("first lookup = %#v, %v", page, err)
+	}
+	next, err := source.Lookup(context.Background(), nil, crud.LookupQuery{ValueField: "id", LabelField: "name", Size: 2, Cursor: page.NextCursor, Dependencies: crud.Fields{"state_id": int64(1)}})
+	if err != nil || len(next.Options) != 1 || next.Options[0].Value != int64(12) || next.NextCursor != "" {
+		t.Fatalf("cursor lookup = %#v, %v", next, err)
+	}
+	exact, err := source.Lookup(context.Background(), nil, crud.LookupQuery{ValueField: "id", LabelField: "name", Search: "21", Size: 2, Dependencies: crud.Fields{"state_id": int64(2)}})
+	if err != nil || len(exact.Options) != 1 || exact.Options[0].Value != int64(21) || exact.Options[0].Label != "Gamma" {
+		t.Fatalf("exact value lookup = %#v, %v", exact, err)
+	}
+	for _, query := range []crud.LookupQuery{{ValueField: "id", LabelField: "name"}, {ValueField: "missing", LabelField: "name", Size: 1}, {ValueField: "id", LabelField: "missing", Size: 1}, {ValueField: "id", LabelField: "name", Size: 1, Cursor: "bad"}, {ValueField: "id", LabelField: "name", Size: 1, Dependencies: crud.Fields{"missing": int64(1)}}} {
+		if _, err := source.Lookup(context.Background(), nil, query); err == nil {
+			t.Fatalf("invalid lookup accepted: %#v", query)
+		}
+	}
+	if _, err := source.Create(context.Background(), nil, crud.Mutation{}); err == nil {
+		t.Fatal("global lookup table accepted a mutation")
+	}
+	if stringValue([]byte("bytes")) != "bytes" || sqlValue([]byte("bytes")) != "bytes" {
+		t.Fatal("byte values were not normalized")
+	}
+}
+
+func TestSimpleTableLookupCombinesFixedFiltersScopeArchiveAndDependencies(t *testing.T) {
+	database, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	database.SetMaxOpenConns(1)
+	if _, err := database.Exec(`CREATE TABLE reference_values (
+        id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL, kind TEXT NOT NULL,
+        state_id INTEGER NOT NULL, name TEXT NOT NULL, version INTEGER NOT NULL,
+        archived INTEGER NOT NULL DEFAULT 0
+    ); CREATE INDEX reference_values_lookup ON reference_values (tenant_id, kind, state_id, name);
+    INSERT INTO reference_values (id, tenant_id, kind, state_id, name, version, archived) VALUES
+        (1, 'tenant-a', 'state', 10, 'Visible', 1, 0),
+        (2, 'tenant-a', 'currency', 10, 'Wrong kind', 1, 0),
+        (3, 'tenant-a', 'state', 20, 'Wrong dependency', 1, 0),
+        (4, 'tenant-b', 'state', 10, 'Wrong tenant', 1, 0),
+        (5, 'tenant-a', 'state', 10, 'Archived', 1, 1),
+        (6, 'tenant-a', 'territory', 10, 'Territory', 1, 0)`); err != nil {
+		t.Fatal(err)
+	}
+	archiveColumn := mustIdentifier("archived")
+	source, err := NewSimpleTable(database, TableDefinition{Table: mustIdentifier("reference_values"), IDColumn: mustIdentifier("id"), VersionColumn: mustIdentifier("version"), ScopeColumns: map[string]Identifier{"tenant_id": mustIdentifier("tenant_id")}, ArchiveColumn: &archiveColumn, Fields: map[crud.FieldKey]Identifier{"kind": mustIdentifier("kind"), "state_id": mustIdentifier("state_id"), "name": mustIdentifier("name")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := source.Lookup(context.Background(), crud.Scope{"tenant_id": "tenant-a"}, crud.LookupQuery{ValueField: "id", LabelField: "name", Size: 10, Dependencies: crud.Fields{"state_id": int64(10)}, FixedFilters: []crud.FixedLookupFilter{{Field: "kind", Values: []crud.Value{"state"}}}})
+	if err != nil || len(page.Options) != 1 || page.Options[0].Value != int64(1) || page.Options[0].Label != "Visible" {
+		t.Fatalf("combined lookup = %#v, %v", page, err)
+	}
+	page, err = source.Lookup(context.Background(), crud.Scope{"tenant_id": "tenant-a"}, crud.LookupQuery{ValueField: "id", LabelField: "name", Size: 10, Dependencies: crud.Fields{"state_id": int64(10)}, FixedFilters: []crud.FixedLookupFilter{{Field: "kind", Values: []crud.Value{"state", "territory"}}}})
+	if err != nil || len(page.Options) != 2 || page.Options[0].Value != int64(6) || page.Options[1].Value != int64(1) {
+		t.Fatalf("membership lookup = %#v, %v", page, err)
+	}
+	if _, err := source.Lookup(context.Background(), crud.Scope{"tenant_id": "tenant-a"}, crud.LookupQuery{ValueField: "id", LabelField: "name", Size: 10, FixedFilters: []crud.FixedLookupFilter{{Field: "kind", Values: []crud.Value{nil}}}}); err == nil {
+		t.Fatal("lookup accepted an invalid fixed-filter value")
+	}
 }
 
 func TestSQLiteSimpleTablesShareMasterDetailTransaction(t *testing.T) {
@@ -297,6 +485,7 @@ func newSQLiteFixture(t testing.TB) conformance.Fixture {
 	return conformance.Fixture{
 		Source: source, UnitOfWork: source,
 		ScopeA: crud.Scope{"tenant_id": "tenant-a"}, ScopeB: crud.Scope{"tenant_id": "tenant-b"},
+		LookupQuery: &crud.LookupQuery{ValueField: "id", LabelField: "name", Size: 10},
 		NewMutation: func(label string) crud.Mutation { return crud.Mutation{Fields: crud.Fields{"name": label}} },
 		Close:       database.Close,
 	}
@@ -328,7 +517,7 @@ func sqliteCRUDDefinition(key crud.ResourceKey, source *SimpleTable, fields []cr
 		Scope:        crud.ScopeRequirements{Keys: []string{"tenant_id"}},
 		Permissions:  crud.Permissions{Create: "create", Read: "read", Update: "update", Delete: "delete"},
 		Fields:       fields,
-		List:         crud.ListDefinition{Columns: columns, Searchable: columns, Sortable: columns, DefaultSort: []crud.Sort{{Field: columns[0], Direction: crud.SortAscending}}, Pagination: crud.PaginationDefinition{Mode: crud.PageModeOffset, DefaultSize: 25, AllowedSizes: []uint16{25, 50, 100}, Total: true}},
+		Grid:         crud.GridDefinition{Columns: columns, Searchable: columns, Sortable: columns, DefaultSort: []crud.Sort{{Field: columns[0], Direction: crud.SortAscending}}, Pagination: crud.PaginationDefinition{Mode: crud.PageModeOffset, DefaultSize: 25, AllowedSizes: []uint16{25, 50, 100}, Total: true}},
 		Presentation: crud.Presentation{Collection: crud.CollectionAuto, Density: crud.DensityCompact},
 		Source:       source, UOW: source, Delete: crud.DeletePolicy{Mode: crud.DeleteModeArchive}, Concurrency: crud.ConcurrencyPolicy{Mode: crud.ConcurrencyVersion},
 	}

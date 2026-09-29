@@ -51,10 +51,10 @@ func validateMasterDetailDefinitions(registry *Registry) error {
 			if !scopeSubset(child.Scope, parent.Scope) {
 				return invalidDefinition(path+".resource", "requires scope keys unavailable from the parent")
 			}
-			if child.List.Pagination.Mode != PageModeOffset || !child.List.Pagination.Total || !child.Source.Capabilities(context.Background()).Has(CapabilityTotalCount) {
+			if child.Grid.Pagination.Mode != PageModeOffset || !child.Grid.Pagination.Total || !child.Source.Capabilities(context.Background()).Has(CapabilityTotalCount) {
 				return invalidDefinition(path+".resource", "must support offset paging with total count")
 			}
-			if detailPageSize(child.List.Pagination, detail.Maximum) == 0 {
+			if detailPageSize(child.Grid.Pagination, detail.Maximum) == 0 {
 				return invalidDefinition(path+".maximum", "must fit a child page size")
 			}
 			if err := validateDetailActions(path, detail, child); err != nil {
@@ -271,7 +271,7 @@ func (service *Service) loadDetails(ctx context.Context, state readState, parent
 		if service.authorizer.Authorize(ctx, state.principal, child.Key, ActionRead, nil) != nil {
 			continue
 		}
-		size := detailPageSize(child.List.Pagination, detail.Maximum)
+		size := detailPageSize(child.Grid.Pagination, detail.Maximum)
 		page, err := child.Source.List(ctx, state.scope, Query{
 			Filters: []Filter{{Field: detail.ParentField, Operator: FilterEqual, Value: string(parentID)}},
 			Page:    PageRequest{Mode: PageModeOffset, Number: 1, Size: size},

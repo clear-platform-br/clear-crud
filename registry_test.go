@@ -20,8 +20,8 @@ func TestRegistryRegisterGetAndSeal(t *testing.T) {
 	definition.Labels.Title = "changed"
 	definition.Fields[0].Label = "changed"
 	definition.Scope.Keys[0] = "changed"
-	definition.List.Columns[0] = "changed"
-	definition.List.Pagination.AllowedSizes[0] = 1
+	definition.Grid.Columns[0] = "changed"
+	definition.Grid.Pagination.AllowedSizes[0] = 1
 
 	stored, ok := registry.Get("contact_categories")
 	if !ok {
@@ -36,11 +36,11 @@ func TestRegistryRegisterGetAndSeal(t *testing.T) {
 	if stored.Scope.Keys[0] != "tenant_id" {
 		t.Fatalf("stored scope key = %q", stored.Scope.Keys[0])
 	}
-	if stored.List.Columns[0] != "name" {
-		t.Fatalf("stored list column = %q", stored.List.Columns[0])
+	if stored.Grid.Columns[0] != "name" {
+		t.Fatalf("stored grid column = %q", stored.Grid.Columns[0])
 	}
-	if stored.List.Pagination.AllowedSizes[0] != 25 {
-		t.Fatalf("stored page size = %d", stored.List.Pagination.AllowedSizes[0])
+	if stored.Grid.Pagination.AllowedSizes[0] != 25 {
+		t.Fatalf("stored page size = %d", stored.Grid.Pagination.AllowedSizes[0])
 	}
 
 	stored.Fields[0].Label = "mutated-return-value"
@@ -125,16 +125,16 @@ func TestValidateDefinitionRejectsInvalidInvariants(t *testing.T) {
 			wantPath: "fields",
 		},
 		"unknown list column": {
-			change:   func(definition *Definition) { definition.List.Columns = []FieldKey{"missing"} },
-			wantPath: "list.columns[0]",
+			change:   func(definition *Definition) { definition.Grid.Columns = []FieldKey{"missing"} },
+			wantPath: "grid.columns[0]",
 		},
 		"unstable default sort": {
-			change:   func(definition *Definition) { definition.List.DefaultSort = nil },
-			wantPath: "list.defaultSort",
+			change:   func(definition *Definition) { definition.Grid.DefaultSort = nil },
+			wantPath: "grid.defaultSort",
 		},
 		"invalid page size": {
-			change:   func(definition *Definition) { definition.List.Pagination.AllowedSizes = []uint16{25, 99, 100} },
-			wantPath: "list.pagination.allowedSizes",
+			change:   func(definition *Definition) { definition.Grid.Pagination.AllowedSizes = []uint16{25, 100, 100} },
+			wantPath: "grid.pagination.allowedSizes",
 		},
 		"mutable without unit of work": {
 			change:   func(definition *Definition) { definition.UOW = nil },
@@ -302,7 +302,7 @@ func TestValidateDefinitionAdditionalInvariants(t *testing.T) {
 		},
 		"cursor capability missing": {
 			change: func(definition *Definition) {
-				definition.List.Pagination.Mode = PageModeCursor
+				definition.Grid.Pagination.Mode = PageModeCursor
 				definition.Source = fakeSource{capabilities: mutableCapabilities()}
 			},
 			wantPath: "source.capabilities",
@@ -367,7 +367,7 @@ func validDefinition(key ResourceKey) Definition {
 			{Key: "name", Label: "crud.contact_categories.name", Type: FieldString, Required: true, Visible: true, MaxLength: 80},
 			{Key: "active", Label: "crud.contact_categories.active", Type: FieldBoolean, Visible: true},
 		},
-		List: ListDefinition{
+		Grid: GridDefinition{
 			Columns:     []FieldKey{"name", "active"},
 			Searchable:  []FieldKey{"name"},
 			Sortable:    []FieldKey{"name", "active"},

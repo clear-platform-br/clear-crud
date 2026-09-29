@@ -30,7 +30,7 @@ func TestMasterDetailCreateIsAtomicAndHidesParentLink(t *testing.T) {
 	if got := childSource.createMutations[0].Fields["parent_id"]; got != "contact-1" {
 		t.Fatalf("child parent link = %#v, want injected parent id", got)
 	}
-	if childSource.listQuery.Filters[0] != (Filter{Field: "parent_id", Operator: FilterEqual, Value: "contact-1"}) {
+	if len(childSource.listQuery.Filters) != 1 || childSource.listQuery.Filters[0].Field != "parent_id" || childSource.listQuery.Filters[0].Operator != FilterEqual || childSource.listQuery.Filters[0].Value != "contact-1" || len(childSource.listQuery.Filters[0].Values) != 0 {
 		t.Fatalf("detail list query = %#v", childSource.listQuery)
 	}
 	got := record.Details["destinations"]
@@ -238,10 +238,10 @@ func newMasterDetailService(t *testing.T, parentSource, childSource *detailSourc
 		Field{Key: "address", Label: "crud.destination.address", Type: FieldEmail, Required: true, Visible: true},
 		Field{Key: "parent_id", Label: "crud.destination.parent", Type: FieldString, Required: true, ReadOnly: true, Visible: false},
 	}
-	child.List.Columns = []FieldKey{"address"}
-	child.List.Searchable = []FieldKey{"address"}
-	child.List.Sortable = []FieldKey{"address"}
-	child.List.DefaultSort = []Sort{{Field: "address", Direction: SortAscending}}
+	child.Grid.Columns = []FieldKey{"address"}
+	child.Grid.Searchable = []FieldKey{"address"}
+	child.Grid.Sortable = []FieldKey{"address"}
+	child.Grid.DefaultSort = []Sort{{Field: "address", Direction: SortAscending}}
 	if err := registry.Register(context.Background(), parent); err != nil {
 		t.Fatal(err)
 	}
