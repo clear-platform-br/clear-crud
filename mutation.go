@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/big"
 	"net/mail"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -48,10 +49,20 @@ func normalizeMutationFields(definition Definition, action Action, mutation Muta
 		if !ok || field.ReadOnly || !field.Visible || field.CreateOnly && action != ActionCreate {
 			return Mutation{}, invalidMutation(nil)
 		}
-		if err := validateFieldValue(field, value); err != nil {
+		if err := validateFieldValueForDefinition(definition, field, value); err != nil {
 			return Mutation{}, err
 		}
 		normalized.Fields[key] = value
+	}
+	if action == ActionCreate {
+		for _, field := range definition.Fields {
+			if field.Default == nil || field.ReadOnly || !field.Visible {
+				continue
+			}
+			if _, exists := normalized.Fields[field.Key]; !exists {
+				normalized.Fields[field.Key] = field.Default
+			}
+		}
 	}
 	for _, field := range definition.Fields {
 		if field.ReadOnly || !field.Visible || field.CreateOnly && action != ActionCreate {
@@ -59,13 +70,13 @@ func normalizeMutationFields(definition Definition, action Action, mutation Muta
 		}
 		value, exists := normalized.Fields[field.Key]
 		if !exists {
-			if field.Required {
+			if field.IsRequired() {
 				return Mutation{}, invalidMutation(FieldErrors{field.Key: "crud.field.required"})
 			}
 			normalized.Fields[field.Key] = nil
 			continue
 		}
-		if field.Required && value == nil {
+		if field.IsRequired() && value == nil {
 			return Mutation{}, invalidMutation(FieldErrors{field.Key: "crud.field.required"})
 		}
 	}
@@ -92,6 +103,18 @@ func cloneDetailMutations(details DetailMutations) DetailMutations {
 }
 
 func validateFieldValue(field Field, value Value) error {
+	return validateFieldValueWithPattern(field, value, nil)
+}
+
+func validateFieldValueForDefinition(definition Definition, field Field, value Value) error {
+	var compiledPattern *regexp.Regexp
+	if definition.fieldPatterns != nil {
+		compiledPattern = definition.fieldPatterns[field.Key]
+	}
+	return validateFieldValueWithPattern(field, value, compiledPattern)
+}
+
+func validateFieldValueWithPattern(field Field, value Value, compiled *regexp.Regexp) error {
 	if value == nil {
 		return nil
 	}
@@ -107,6 +130,16 @@ func validateFieldValue(field Field, value Value) error {
 		if _, ok := value.(bool); !ok {
 			return invalidMutation(FieldErrors{field.Key: "crud.field.invalid"})
 		}
+	case FieldEnum:
+		if !allowedValue(value) {
+			return invalidMutation(FieldErrors{field.Key: "crud.field.invalid"})
+		}
+	case FieldLookup:
+		// Lookup values are opaque scalar keys. They may be numeric IDs or
+		// strings, depending on the registered target resource.
+		if !allowedValue(value) {
+			return invalidMutation(FieldErrors{field.Key: "crud.field.invalid"})
+		}
 	default:
 		if _, ok := value.(string); !ok {
 			return invalidMutation(FieldErrors{field.Key: "crud.field.invalid"})
@@ -117,6 +150,9 @@ func validateFieldValue(field Field, value Value) error {
 		return invalidMutation(FieldErrors{field.Key: "crud.field.length"})
 	}
 	if err := validateFieldFormat(field, text, isText); err != nil {
+		return err
+	}
+	if err := validateFieldPattern(field, text, compiled); err != nil {
 		return err
 	}
 	if field.Type == FieldEnum && !enumContains(field.Enum, value) {

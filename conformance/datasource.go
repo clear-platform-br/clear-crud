@@ -189,6 +189,20 @@ func TestDataSource(t *testing.T, factory Factory) {
 				}
 				_, err := fixture.Source.Get(context.Background(), fixture.ScopeA, record.ID)
 				requireCode(t, err, crud.ErrorNotFound)
+				if policy.mode == crud.DeleteModeArchive {
+					page, err := fixture.Source.List(context.Background(), fixture.ScopeA, fixture.ListQuery)
+					if err != nil {
+						t.Fatalf("List after archive: %v", err)
+					}
+					for _, listed := range page.Records {
+						if listed.ID == record.ID {
+							t.Fatal("archived record appeared in normal List")
+						}
+					}
+					if _, err := fixture.Source.Update(context.Background(), fixture.ScopeA, record.ID, record.Version, fixture.NewMutation("archived-update")); err == nil {
+						t.Fatal("archived record accepted a normal Update")
+					}
+				}
 			})
 		}
 	})
@@ -201,6 +215,9 @@ func TestDataSource(t *testing.T, factory Factory) {
 		if fixture.LookupQuery == nil {
 			t.Fatal("lookup capability requires Fixture.LookupQuery")
 		}
+		// The conformance fixture is intentionally empty. Seed one bounded
+		// option through the adapter's own mutation path before reading it.
+		create(t, fixture, fixture.ScopeA, "lookup-option")
 		page, err := fixture.Source.Lookup(context.Background(), fixture.ScopeA, *fixture.LookupQuery)
 		if err != nil {
 			t.Fatalf("Lookup: %v", err)

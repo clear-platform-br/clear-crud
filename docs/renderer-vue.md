@@ -11,6 +11,9 @@ repositório:
 O produto não escreve grade, formulário, paginação, busca, cliente HTTP,
 handler ou feedback CRUD paralelo. Ele fornece um `CrudTransport` configurado
 para o endpoint fechado do produto e monta `CrudScreen` pela chave do recurso.
+`CrudScreen` é sempre conteúdo embutível: o produto hospedeiro fornece o shell,
+viewport, header, menu lateral, rodapé e tema global. O renderer não oferece
+modos standalone/embed nem altera o layout externo da aplicação.
 
 ```ts
 import { HttpCrudClient } from '@clear-platform-br/crud-client'
@@ -42,8 +45,12 @@ autoridade e também os rejeita se forem enviados diretamente.
 Quando a definição pública expõe `Details`, o editor apresenta as coleções
 filhas diretas. O usuário inclui, edita ou remove itens e o client envia uma
 única mutation. O campo interno de vínculo não é renderizado, nem aceito do
-navegador. Árvore, filho de filho, muitos-para-muitos, upload, workflow e
-efeitos externos continuam fora do renderer.
+navegador. Árvore, filho de filho, muitos-para-muitos, workflow e efeitos
+externos continuam fora do renderer. A release experimental atual ainda não
+oferece anexos; quando a capability genérica for publicada, upload,
+substituição, remoção e miniaturas serão habilitados somente por definição
+explícita do recurso e por um repositório de armazenamento registrado no
+servidor.
 
 ## Tema e extensão
 
@@ -51,6 +58,26 @@ Os componentes publicam `data-clear-crud-part` e `data-clear-crud-action`.
 Importar `theme-default.css` é opcional. Produtos podem sobrescrever apenas as
 custom properties `--clear-crud-*` ou fornecer tema integral; não devem mudar
 a semântica do controller nem enviar estilos pela definição do backend.
+
+O tema padrão oferece alternância de modo escuro e densidade compacta. Essas
+preferências são locais ao navegador e à chave do recurso, portanto sobrevivem
+ao refresh sem alterar a definição nem o backend. Na grade, textos ficam à
+esquerda, números à direita e booleanos centralizados; os símbolos booleanos
+podem ser declarados em `Field.BooleanDisplay`.
+
+O toolbar também publica `Filtros` sem configuração adicional. O renderer gera
+um controle para cada coluna pública de `Grid.Columns`; enums e booleanos usam
+checkboxes e aceitam várias opções, enviando uma operação `in` com os valores
+canônicos. `Todos` remove o filtro daquela coluna. Texto/lookup usam busca por
+contém e tipos numéricos/data usam igualdade.
+
+O `theme-default.css` é separado por assuntos em seções estáveis: tokens,
+fundação/escopo do tema, controles compartilhados, toolbar, grade, paginação,
+feedback (sucesso, aviso e erro), modal/formulário, lookup, enum,
+acessibilidade e responsividade. O host continua responsável por Header, Menu,
+Sidebar e Footer. Avisos usam o token âmbar, erros usam vermelho e sucesso usa
+o verde da ação primária; isso permite trocar a paleta sem localizar regras
+espalhadas pelos componentes.
 
 ## Galeria de temas planejada
 

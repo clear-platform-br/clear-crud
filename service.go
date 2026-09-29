@@ -3,29 +3,34 @@ package crud
 import (
 	"context"
 	"errors"
+	"sync"
 )
 
 // Dependencies contains the host ports required by Service. The host owns
 // identity, scope, authorization, auditing, translation, and time.
 type Dependencies struct {
-	Registry   *Registry
-	Principal  PrincipalProvider
-	Scope      ScopeProvider
-	Authorizer Authorizer
-	Audit      AuditSink
-	Translator Translator
-	Clock      Clock
+	Registry    *Registry
+	Principal   PrincipalProvider
+	Scope       ScopeProvider
+	Authorizer  Authorizer
+	Audit       AuditSink
+	Translator  Translator
+	Clock       Clock
+	LookupCache LookupCache
 }
 
 // Service applies the public CRUD contract before delegating to a DataSource.
 type Service struct {
-	registry   *Registry
-	principal  PrincipalProvider
-	scope      ScopeProvider
-	authorizer Authorizer
-	audit      AuditSink
-	translator Translator
-	clock      Clock
+	registry      *Registry
+	principal     PrincipalProvider
+	scope         ScopeProvider
+	authorizer    Authorizer
+	audit         AuditSink
+	translator    Translator
+	clock         Clock
+	lookupCache   LookupCache
+	lookupMu      sync.Mutex
+	lookupFlights map[string]*lookupFlight
 }
 
 // PublicDefinition contains only renderer-safe resource metadata. It never
@@ -35,7 +40,8 @@ type PublicDefinition struct {
 	Labels       Labels
 	Fields       []Field
 	Details      []PublicDetailDefinition
-	List         ListDefinition
+	Grid         GridDefinition
+	Form         FormDefinition
 	Presentation Presentation
 	Actions      []Action
 	Delete       DeletePolicy
@@ -63,7 +69,11 @@ func NewService(dependencies Dependencies) (*Service, error) {
 		registry: dependencies.Registry, principal: dependencies.Principal,
 		scope: dependencies.Scope, authorizer: dependencies.Authorizer,
 		audit: dependencies.Audit, translator: dependencies.Translator,
-		clock: dependencies.Clock,
+		clock: dependencies.Clock, lookupCache: dependencies.LookupCache,
+		lookupFlights: make(map[string]*lookupFlight),
+	}
+	if service.lookupCache == nil {
+		service.lookupCache = NewMemoryLookupCache(MemoryLookupCacheOptions{})
 	}
 	if err := validateMasterDetailDefinitions(dependencies.Registry); err != nil {
 		return nil, err
@@ -113,10 +123,11 @@ func (service *Service) resolveRead(ctx context.Context, key ResourceKey) (readS
 }
 
 const (
-	maxQuerySearchRunes = 256
-	maxQueryFilters     = 20
-	maxQuerySortTerms   = 8
-	maxCursorBytes      = 512
+	maxQuerySearchRunes      = 256
+	maxQueryFilters          = 20
+	maxQuerySortTerms        = 8
+	maxCursorBytes           = 512
+	maxLookupMinSearchLength = 64
 )
 
 func validateTrustedScope(requirements ScopeRequirements, scope Scope) error {
@@ -142,16 +153,18 @@ type PublicDetailDefinition struct {
 }
 
 func publicDefinition(ctx context.Context, state readState, authorizer Authorizer, registry *Registry) PublicDefinition {
+	clone := cloneDefinition(state.definition)
 	definition := PublicDefinition{
 		Key:          state.definition.Key,
 		Labels:       state.definition.Labels,
-		List:         cloneDefinition(state.definition).List,
+		Grid:         clone.Grid,
+		Form:         clone.Form,
 		Presentation: state.definition.Presentation,
 		Delete:       state.definition.Delete,
 	}
 	for _, field := range state.definition.Fields {
 		if field.Visible {
-			definition.Fields = append(definition.Fields, field)
+			definition.Fields = append(definition.Fields, publicField(field))
 		}
 	}
 	for _, action := range []Action{ActionCreate, ActionUpdate, ActionDelete, ActionHelp} {
@@ -168,7 +181,7 @@ func publicDefinition(ctx context.Context, state readState, authorizer Authorize
 		public := PublicDetailDefinition{Key: detail.Key, Resource: detail.Resource, Labels: child.Labels, Minimum: detail.Minimum, Maximum: detail.Maximum}
 		for _, field := range child.Fields {
 			if field.Key != detail.ParentField && field.Visible {
-				public.Fields = append(public.Fields, field)
+				public.Fields = append(public.Fields, publicField(field))
 			}
 		}
 		public.AllowCreate = detail.AllowCreate && actionEnabled(child.Permissions, ActionCreate) && authorizer.Authorize(ctx, state.principal, child.Key, ActionCreate, nil) == nil
@@ -177,6 +190,24 @@ func publicDefinition(ctx context.Context, state readState, authorizer Authorize
 		definition.Details = append(definition.Details, public)
 	}
 	return definition
+}
+
+func publicField(field Field) Field {
+	field.Required = field.IsRequired()
+	field.Optional = false
+	if field.Lookup != nil {
+		lookup := *field.Lookup
+		lookup.Dependencies = append([]FieldKey(nil), field.Lookup.Dependencies...)
+		// Fixed filters are persistence metadata. The renderer only needs the
+		// lookup endpoint and declared dynamic dependencies.
+		lookup.FixedFilters = nil
+		field.Lookup = &lookup
+	}
+	if field.BooleanDisplay != nil {
+		booleanDisplay := *field.BooleanDisplay
+		field.BooleanDisplay = &booleanDisplay
+	}
+	return field
 }
 
 func actionEnabled(permissions Permissions, action Action) bool {

@@ -1,0 +1,46 @@
+{
+  "schema": "clear.crud.settings-catalog.v1",
+  "purpose": "Machine-readable map of defaults, exceptions and where each capability belongs.",
+  "principles": [
+    "The engine is domain-neutral: it knows resources, fields, scopes, queries and presentation metadata, never brands, cars, states or airports.",
+    "Defaults are safe and bounded; a consumer declares only an exception or an ambiguous relationship.",
+    "Tenant scope is server-owned and mandatory for tenant data. Global scope is explicit, read-only and never inferred from a table name.",
+    "The browser may choose values and search text, but never a tenant, table, column, SQL statement, adapter or lookup target.",
+    "Reference data is stored once, cached by the server and queried by dependency; never copied once per tenant or preloaded in full by every user."
+  ],
+  "workflow": [
+    "Read capability-map.md to distinguish published behavior from planned backlog items.",
+    "Classify the resource as tenant data or explicit global reference data.",
+    "Start with the automatic registration and inspect the generated definition.",
+    "Add a typed option only when the default is not correct for this resource.",
+    "For dependent lookups, register each target resource and declare only the dependency field keys.",
+    "Run the smoke test for the setting group and verify tenant isolation, read-only global behavior and bounded requests."
+  ],
+  "settings": [
+    {"id":"scope.tenant","default":"tenant","appliesTo":"resource","declaration":"RegisterAutoTenantTable","whenToUse":"All tenant-owned records in a SaaS product.","security":"The ScopeProvider supplies tenant_id; the HTTP request cannot override it."},
+    {"id":"scope.global_reference","default":"off","appliesTo":"resource","declaration":"RegisterAutoGlobalTable","whenToUse":"Immutable or centrally managed catalogs shared by tenants, such as FIPE or postal geography.","security":"Must be explicit and read-only; never add tenant_id just to duplicate global rows."},
+    {"id":"lookup.dependent","default":"off","appliesTo":"field","declaration":"WithLookup(field, LookupDefinition)","whenToUse":"The valid options of one field depend on values already chosen in the form.","example":"state_id -> region_id -> municipality_id","engineBehavior":"Server validates dependencies, clears downstream draft values, transports depends.<field>, applies scope and pages the target resource."},
+    {"id":"lookup.cache","default":"bounded process-local read-through cache","appliesTo":"service","declaration":"Dependencies.LookupCache (optional host override)","whenToUse":"Always for repeated lookup reads; use a shared implementation when the service has multiple instances.","engineBehavior":"Key includes target resource, value/label fields, search, cursor, fixed filters, declared dependencies and trusted scope; global resources share entries across tenants, tenant resources do not."},
+    {"id":"lookup.min_search_length","default":3,"appliesTo":"field","declaration":"LookupDefinition.MinSearchLength","whenToUse":"Large catalogs where searching with one or two characters would create noisy, expensive requests; set a smaller value only when the catalog's identifiers require it.","engineBehavior":"The renderer does not issue filtered lookup requests until the typed value reaches the configured minimum. The explicit options control still loads the bounded initial page."},
+    {"id":"lookup.fixed_filters","default":"none","appliesTo":"field","declaration":"LookupDefinition.FixedFilters","whenToUse":"Partition one generic auxiliary table into server-defined catalogs such as kind=state or kind=currency.","engineBehavior":"A server-owned typed value list combines with declared dependencies, trusted scope, archive and the lookup cache. One value applies equality; multiple values apply membership. If the lookup must expose one catalog, declare one catalog ID; multiple IDs intentionally expose their union. It is never accepted from the browser and never replaces tenant scope or authorization."},
+    {"id":"grid.columns","default":"first bounded automatic projection","appliesTo":"grid","declaration":"WithGridColumns","whenToUse":"The operator needs a different subset or order than the automatic projection."},
+    {"id":"form.fields","default":"all visible writable fields in definition order","appliesTo":"form","declaration":"WithFormFields","whenToUse":"The form needs an intentional order or a smaller writable projection."},
+    {"id":"field.required","default":"required","appliesTo":"field","declaration":"WithOptional","whenToUse":"Only when the schema and business rule explicitly permit an empty value."},
+    {"id":"field.default","default":"none","appliesTo":"field","declaration":"Field.Default or sqladapter.WithDefault","whenToUse":"Use a static scalar that should prefill a new form and be applied when a create mutation omits the field. Dynamic expressions remain adapter-owned.","engineBehavior":"The renderer pre-populates create forms and the core applies the same value only during create normalization; updates never replace an existing value."},
+    {"id":"field.text_max_length","default":255,"appliesTo":"text field","declaration":"WithMaxLength","whenToUse":"The schema or business rule has a smaller or otherwise explicit finite bound."},
+    {"id":"field.pattern","default":"none","appliesTo":"string-backed field","declaration":"Field.Pattern or sqladapter.WithPattern; prefer public crud.Pattern* constants for common shapes","whenToUse":"A field needs a reusable format constraint such as a code, acronym, identifier, Unicode letter shape or controlled textual value.","engineBehavior":"The server compiles the RE2 expression during bootstrap and applies it during create/update validation. PatternMessage is a localizable message code; the browser never supplies the expression. Presets are readable string constants; custom RE2 remains available for reviewed cases."},
+    {"id":"field.enum_control","default":"auto","appliesTo":"enum field","declaration":"WithEnumControl","whenToUse":"The desktop interaction should be explicitly select, radio, segmented or buttons; mobile may force native select."},
+    {"id":"field.enum_schema","default":"discover finite CHECK/enum metadata at bootstrap","appliesTo":"enum field","declaration":"adapter MetadataSource or WithEnum","whenToUse":"Use WithEnum only when the adapter cannot expose structural values or labels need an explicit consumer mapping."},
+    {"id":"resource.read_model","default":"off","appliesTo":"resource/grid","declaration":"sqladapter.RegisterReadModel with ReadModelConfig and ReadOnly fields","whenToUse":"Use when a grid needs a value supplied by a registered join or calculation; keep the field out of mutations and leave query execution to the adapter.","engineBehavior":"The core exposes adapter-returned read-only fields, validates registered filter/sort allowlists and rejects attempts to write them. When SQL aliases equal public field keys, the SQL adapter infers field/scope maps and searchable/sortable allowlists from the definition; explicit maps remain available for aliases or narrower projections. The server-owned query is validated once at bootstrap; SQL and join syntax never come from HTTP."},
+    {"id":"grid.page_size","default":25,"appliesTo":"grid","declaration":"WithGridPageSize","whenToUse":"A screen or smoke test needs a smaller declared page size; the service remains bounded."},
+    {"id":"grid.archive_visibility","default":"active_only","appliesTo":"grid","declaration":"Grid.ArchiveVisibility or sqladapter.WithArchiveVisibility","whenToUse":"Enable a server-declared Excluídos toggle when operators must consult archived records together with active records.","engineBehavior":"The browser can request include_archived only when the registered Grid declares active_and_archived. Adapters return Archived metadata; the renderer marks those rows with an Excluído badge in the actions column, a dedicated visual rail and hides edit/delete actions. Restoration is a separate capability."},
+    {"id":"resource.archive","default":"disabled","appliesTo":"resource","declaration":"WithSoftDelete","whenToUse":"The product explicitly chooses recoverable archive semantics; otherwise no delete action is exposed."},
+    {"id":"resource.hard_delete","default":"disabled","appliesTo":"resource","declaration":"WithHardDelete","whenToUse":"Only when physical deletion is an explicit, reviewed product policy; it is mutually exclusive with archive."}
+  ],
+  "notEngineSettings": [
+    "FIPE, Correios, airline, airport or other domain catalogs and their import schedules",
+    "SQL supplied by a browser",
+    "tenant selection supplied by a browser",
+    "workflow, approval, payments, documents or external side effects"
+  ]
+}

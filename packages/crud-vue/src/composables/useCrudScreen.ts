@@ -1,4 +1,4 @@
-import { CrudController, type CrudRecord, type CrudState, type CrudTransport, type Value } from '@clear-platform-br/crud-client'
+import { CrudController, type CrudRecord, type CrudState, type CrudTransport, type Filter, type Value } from '@clear-platform-br/crud-client'
 import { onMounted, onUnmounted, shallowRef } from 'vue'
 
 export function useCrudScreen(resource: string, client: CrudTransport) {
@@ -11,6 +11,9 @@ export function useCrudScreen(resource: string, client: CrudTransport) {
   return {
     state,
     search: (value: string) => controller.search(value),
+    setFilters: (filters: Filter[]) => controller.setFilters(filters),
+    toggleArchived: () => controller.setArchivedVisibility(!Boolean(state.value.query.includeArchived)),
+    goTo: (page: number) => controller.goTo(page),
     previousPage: () => controller.goTo(Math.max(1, state.value.query.page - 1)),
     nextPage: () => controller.goTo(state.value.query.page + 1),
     beginCreate: () => controller.beginCreate(),
@@ -25,6 +28,6 @@ export function useCrudScreen(resource: string, client: CrudTransport) {
     cancelDelete: () => controller.cancelDelete(),
     confirmDelete: () => controller.confirmDelete(),
     dismissFeedback: () => controller.dismissFeedback(),
-    lookup: (lookupResource: string, field: string, search: string) => controller.lookup(lookupResource, field, search),
+    lookup: (lookupResource: string, field: string, search: string, dependencies?: Record<string, Value>) => controller.lookup(lookupResource, field, search, dependencies),
   }
 }

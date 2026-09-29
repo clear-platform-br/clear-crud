@@ -18,6 +18,7 @@ const (
 	FilterContains       FilterOperator = "contains"
 	FilterPrefix         FilterOperator = "prefix"
 	FilterIsNull         FilterOperator = "is_null"
+	FilterIn             FilterOperator = "in"
 )
 
 // Filter limits a query to an allowlisted field and operator.
@@ -25,6 +26,10 @@ type Filter struct {
 	Field    FieldKey
 	Operator FilterOperator
 	Value    Value
+	// Values is used only by FilterIn and represents an OR set for one field.
+	// Adapters translate the set to their native parameterized membership
+	// predicate; clients never provide SQL fragments.
+	Values []Value
 }
 
 // PageRequest contains exactly one paging strategy after validation.
@@ -37,10 +42,11 @@ type PageRequest struct {
 
 // Query is the normalized server-side list request.
 type Query struct {
-	Search  string
-	Filters []Filter
-	Sort    []Sort
-	Page    PageRequest
+	Search          string
+	Filters         []Filter
+	Sort            []Sort
+	Page            PageRequest
+	IncludeArchived bool
 }
 
 // Page is a paginated result returned by a DataSource.
@@ -54,10 +60,18 @@ type Page struct {
 
 // LookupQuery is the normalized request for a lookup field.
 type LookupQuery struct {
+	// Resource, ValueField, and LabelField are populated by Service from the
+	// registered LookupDefinition. Transports never accept them from clients.
+	Resource     ResourceKey
+	ValueField   FieldKey
+	LabelField   FieldKey
 	Search       string
 	Cursor       string
 	Size         uint16
 	Dependencies Fields
+	// FixedFilters is populated by Service from LookupDefinition. Data sources
+	// must treat it as registered server metadata, never client input.
+	FixedFilters []FixedLookupFilter
 }
 
 // LookupOption is the only shape exposed by a lookup result.
@@ -73,7 +87,9 @@ type LookupPage struct {
 	Total      *uint64
 }
 
-// DataSource is the persistence port for a resource.
+// DataSource is the persistence port for a resource. When it declares
+// CapabilityArchive, records archived through DeleteModeArchive must be absent
+// from normal List and Get results and must reject normal mutations.
 type DataSource interface {
 	Capabilities(context.Context) Capabilities
 	List(context.Context, Scope, Query) (Page, error)

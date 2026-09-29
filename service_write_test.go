@@ -199,6 +199,36 @@ func TestMutationValidationCoversFormatsEnumsHooksAndBounds(t *testing.T) {
 	}
 }
 
+func TestMutationValidationAppliesDeclarativeFieldPattern(t *testing.T) {
+	t.Parallel()
+	definition := validDefinition("patterned")
+	definition.Fields = append(definition.Fields, Field{
+		Key: "state_code", Label: "crud.state_code", Type: FieldString,
+		Optional: true, Visible: true, Pattern: `^[A-Z]{2}$`, PatternMessage: "crud.state_code.pattern",
+	})
+	valid := Mutation{Fields: Fields{"name": "Ana", "active": true, "state_code": "SP"}}
+	if _, err := normalizeMutation(context.Background(), Scope{}, definition, valid); err != nil {
+		t.Fatalf("valid patterned mutation error = %v", err)
+	}
+	_, err := normalizeMutation(context.Background(), Scope{}, definition, Mutation{Fields: Fields{"name": "Ana", "active": true, "state_code": "sp"}})
+	if err == nil {
+		t.Fatal("patterned mutation was accepted")
+	}
+	public, ok := err.(*Error)
+	if !ok || public.Fields["state_code"] != "crud.state_code.pattern" {
+		t.Fatalf("pattern error = %#v, want custom message", err)
+	}
+	if _, err := normalizeMutationForAction(context.Background(), Scope{}, definition, ActionUpdate, Mutation{Fields: Fields{"name": "Ana", "active": true, "state_code": "sp"}}); err == nil {
+		t.Fatal("update accepted a value that violates the pattern")
+	}
+	genericDefinition := validDefinition("generic_pattern")
+	genericDefinition.Fields[0].Pattern = `^[A-Z].*$`
+	_, err = normalizeMutation(context.Background(), Scope{}, genericDefinition, Mutation{Fields: Fields{"name": "lowercase", "active": true}})
+	if public, ok := err.(*Error); !ok || public.Fields["name"] != "crud.field.pattern" {
+		t.Fatalf("generic pattern error = %#v, want default message", err)
+	}
+}
+
 func TestServiceWriteFailurePathsDoNotAdvance(t *testing.T) {
 	t.Parallel()
 

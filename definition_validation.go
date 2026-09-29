@@ -51,7 +51,10 @@ func ValidateDefinition(ctx context.Context, definition Definition) error {
 	if err != nil {
 		return err
 	}
-	if err := validateList(definition.List, fields); err != nil {
+	if err := validateGrid(definition.Grid, fields); err != nil {
+		return err
+	}
+	if err := validateForm(definition.Form, fields); err != nil {
 		return err
 	}
 	if err := validatePresentation(definition.Presentation); err != nil {
@@ -94,6 +97,12 @@ func validateDetails(details []DetailDefinition) error {
 }
 
 func validateScope(scope ScopeRequirements) error {
+	if scope.Mode != "" && scope.Mode != ScopeModeTenant && scope.Mode != ScopeModeGlobal {
+		return invalidDefinition("scope.mode", "is unknown")
+	}
+	if scope.Mode == ScopeModeGlobal && len(scope.Keys) != 0 {
+		return invalidDefinition("scope.keys", "must be empty for a global resource")
+	}
 	seen := make(map[string]struct{}, len(scope.Keys))
 	for index, key := range scope.Keys {
 		if !validKey(key) {
@@ -132,13 +141,21 @@ func validateDeletePolicy(definition Definition) error {
 }
 
 func validateCapabilities(definition Definition, capabilities Capabilities) error {
-	if definition.List.Pagination.Mode == PageModeOffset && !capabilities.Has(CapabilityOffsetPage) {
+	if definition.Grid.ArchiveVisibility == ArchiveVisibilityActiveAndArchived && !capabilities.Has(CapabilityArchive) {
+		return invalidDefinition("source.capabilities", "must support archive visibility")
+	}
+	if definition.Scope.Mode == ScopeModeGlobal {
+		if definition.Permissions.Create != "" || definition.Permissions.Update != "" || definition.Permissions.Delete != "" || definition.Delete.Mode != DeleteModeNone {
+			return invalidDefinition("scope.mode", "global resources must be read-only")
+		}
+	}
+	if definition.Grid.Pagination.Mode == PageModeOffset && !capabilities.Has(CapabilityOffsetPage) {
 		return invalidDefinition("source.capabilities", "must support offset pagination")
 	}
-	if definition.List.Pagination.Mode == PageModeCursor && !capabilities.Has(CapabilityCursorPage) {
+	if definition.Grid.Pagination.Mode == PageModeCursor && !capabilities.Has(CapabilityCursorPage) {
 		return invalidDefinition("source.capabilities", "must support cursor pagination")
 	}
-	if definition.List.Pagination.Total && !capabilities.Has(CapabilityTotalCount) {
+	if definition.Grid.Pagination.Total && !capabilities.Has(CapabilityTotalCount) {
 		return invalidDefinition("source.capabilities", "must support total count")
 	}
 	for _, field := range definition.Fields {

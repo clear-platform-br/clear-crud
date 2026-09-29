@@ -69,10 +69,11 @@ type Scope map[string]string
 
 // Record is the public representation returned by a DataSource.
 type Record struct {
-	ID      RecordID
-	Version Version
-	Fields  Fields
-	Details DetailRecords
+	ID       RecordID
+	Version  Version
+	Fields   Fields
+	Details  DetailRecords
+	Archived bool `json:",omitempty"`
 }
 
 // DetailRecords groups child records by their server-registered collection key.

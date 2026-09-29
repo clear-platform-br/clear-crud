@@ -65,16 +65,12 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	if len(parts) == 6 && parts[4] == "lookups" && request.Method == http.MethodGet {
-		if err := rejectUnknownQuery(request, map[string]bool{"q": true, "cursor": true, "size": true}); err != nil {
-			handler.writeError(writer, request, err)
-			return
-		}
-		size, err := lookupSize(request)
+		query, err := lookupQuery(request, definition, crud.FieldKey(parts[5]))
 		if err != nil {
 			handler.writeError(writer, request, err)
 			return
 		}
-		page, err := handler.service.Lookup(request.Context(), key, crud.FieldKey(parts[5]), crud.LookupQuery{Search: request.URL.Query().Get("q"), Cursor: request.URL.Query().Get("cursor"), Size: size})
+		page, err := handler.service.Lookup(request.Context(), key, crud.FieldKey(parts[5]), query)
 		if err != nil {
 			handler.writeError(writer, request, err)
 			return
@@ -88,16 +84,12 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 func (handler *Handler) records(w http.ResponseWriter, r *http.Request, key crud.ResourceKey, definition crud.PublicDefinition) {
 	switch r.Method {
 	case http.MethodGet:
-		if err := rejectUnknownQuery(r, map[string]bool{"q": true, "page": true, "size": true}); err != nil {
-			handler.writeError(w, r, err)
-			return
-		}
-		pageNumber, size, err := pageValues(r)
+		query, err := listQuery(r, definition)
 		if err != nil {
 			handler.writeError(w, r, err)
 			return
 		}
-		page, err := handler.service.List(r.Context(), key, crud.Query{Search: r.URL.Query().Get("q"), Page: crud.PageRequest{Number: pageNumber, Size: size}})
+		page, err := handler.service.List(r.Context(), key, query)
 		if err != nil {
 			handler.writeError(w, r, err)
 			return
@@ -118,6 +110,115 @@ func (handler *Handler) records(w http.ResponseWriter, r *http.Request, key crud
 	default:
 		handler.method(w, r)
 	}
+}
+
+func listQuery(r *http.Request, definition crud.PublicDefinition) (crud.Query, error) {
+	pageNumber, size, err := pageValues(r)
+	if err != nil {
+		return crud.Query{}, err
+	}
+	includeArchived, err := includeArchivedValue(r)
+	if err != nil {
+		return crud.Query{}, err
+	}
+	filters, err := filterValues(r, definition)
+	if err != nil {
+		return crud.Query{}, err
+	}
+	for key, values := range r.URL.Query() {
+		if key == "q" || key == "page" || key == "size" || key == "include_archived" || strings.HasPrefix(key, "filter.") {
+			if !strings.HasPrefix(key, "filter.") && len(values) != 1 {
+				return crud.Query{}, invalid()
+			}
+			continue
+		}
+		return crud.Query{}, invalid()
+	}
+	return crud.Query{Search: r.URL.Query().Get("q"), Filters: filters, IncludeArchived: includeArchived, Page: crud.PageRequest{Number: pageNumber, Size: size}}, nil
+}
+
+func filterValues(r *http.Request, definition crud.PublicDefinition) ([]crud.Filter, error) {
+	filters := make([]crud.Filter, 0)
+	fields := make(map[crud.FieldKey]crud.Field, len(definition.Fields))
+	for _, field := range definition.Fields {
+		fields[field.Key] = field
+	}
+	for key, values := range r.URL.Query() {
+		if !strings.HasPrefix(key, "filter.") {
+			continue
+		}
+		parts := strings.Split(strings.TrimPrefix(key, "filter."), ".")
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" || len(values) == 0 {
+			return nil, invalid()
+		}
+		fieldKey := crud.FieldKey(parts[0])
+		field, ok := fields[fieldKey]
+		if !ok || field.Sensitive {
+			return nil, invalid()
+		}
+		operator := crud.FilterOperator(parts[1])
+		if operator == crud.FilterIn {
+			if len(values) > 100 {
+				return nil, invalid()
+			}
+			parsed := make([]crud.Value, 0, len(values))
+			for _, raw := range values {
+				value, err := parseFilterValue(field, operator, raw)
+				if err != nil {
+					return nil, err
+				}
+				parsed = append(parsed, value)
+			}
+			filters = append(filters, crud.Filter{Field: fieldKey, Operator: operator, Values: parsed})
+			continue
+		}
+		if len(values) != 1 {
+			return nil, invalid()
+		}
+		value, err := parseFilterValue(field, operator, values[0])
+		if err != nil {
+			return nil, err
+		}
+		filters = append(filters, crud.Filter{Field: fieldKey, Operator: operator, Value: value})
+	}
+	return filters, nil
+}
+
+func parseFilterValue(field crud.Field, operator crud.FilterOperator, raw string) (crud.Value, error) {
+	if operator == crud.FilterIsNull {
+		if raw != "" {
+			return nil, invalid()
+		}
+		return nil, nil
+	}
+	switch field.Type {
+	case crud.FieldBoolean:
+		value, err := strconv.ParseBool(raw)
+		if err != nil {
+			return nil, invalid()
+		}
+		return value, nil
+	case crud.FieldInteger:
+		value, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			return nil, invalid()
+		}
+		return value, nil
+	default:
+		return raw, nil
+	}
+}
+
+func includeArchivedValue(request *http.Request) (bool, error) {
+	value := request.URL.Query().Get("include_archived")
+	if value == "" {
+		return false, nil
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, invalid()
+	}
+	return parsed, nil
 }
 
 func (handler *Handler) record(w http.ResponseWriter, r *http.Request, key crud.ResourceKey, definition crud.PublicDefinition, id crud.RecordID) {
@@ -243,6 +344,75 @@ func lookupSize(r *http.Request) (uint16, error) {
 	}
 	return uint16(size), nil
 }
+
+func lookupQuery(r *http.Request, definition crud.PublicDefinition, fieldKey crud.FieldKey) (crud.LookupQuery, error) {
+	var lookup *crud.LookupDefinition
+	for _, field := range definition.Fields {
+		if field.Key == fieldKey {
+			lookup = field.Lookup
+			break
+		}
+	}
+	if lookup == nil {
+		return crud.LookupQuery{}, invalid()
+	}
+	values := r.URL.Query()
+	for key, entries := range values {
+		if key == "q" || key == "cursor" || key == "size" {
+			if len(entries) != 1 {
+				return crud.LookupQuery{}, invalid()
+			}
+			continue
+		}
+		if !strings.HasPrefix(key, "depends.") || len(entries) != 1 {
+			return crud.LookupQuery{}, invalid()
+		}
+		dependency := crud.FieldKey(strings.TrimPrefix(key, "depends."))
+		allowed := false
+		for _, declared := range lookup.Dependencies {
+			if declared == dependency {
+				allowed = true
+				break
+			}
+		}
+		if !allowed || dependency == "" {
+			return crud.LookupQuery{}, invalid()
+		}
+	}
+	size, err := lookupSize(r)
+	if err != nil {
+		return crud.LookupQuery{}, err
+	}
+	query := crud.LookupQuery{Search: values.Get("q"), Cursor: values.Get("cursor"), Size: size, Dependencies: crud.Fields{}}
+	for _, dependency := range lookup.Dependencies {
+		raw, ok := values["depends."+string(dependency)]
+		if !ok || len(raw) == 0 || raw[0] == "" {
+			continue
+		}
+		value, ok := lookupScalar(raw[0])
+		if !ok {
+			return crud.LookupQuery{}, invalid()
+		}
+		query.Dependencies[dependency] = value
+	}
+	if len(query.Dependencies) == 0 {
+		query.Dependencies = nil
+	}
+	return query, nil
+}
+
+func lookupScalar(value string) (crud.Value, bool) {
+	switch value {
+	case "true":
+		return true, true
+	case "false":
+		return false, true
+	}
+	if integer, err := strconv.ParseInt(value, 10, 64); err == nil {
+		return integer, true
+	}
+	return value, true
+}
 func normalizeFields(definition crud.PublicDefinition, fields crud.Fields) error {
 	known := map[crud.FieldKey]crud.Field{}
 	for _, field := range definition.Fields {
@@ -254,7 +424,7 @@ func normalizeFields(definition crud.PublicDefinition, fields crud.Fields) error
 			return invalid()
 		}
 		if number, ok := value.(json.Number); ok {
-			if field.Type != crud.FieldInteger {
+			if field.Type != crud.FieldInteger && field.Type != crud.FieldLookup {
 				return invalid()
 			}
 			integer, err := number.Int64()

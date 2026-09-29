@@ -69,7 +69,7 @@ func TestServiceListNormalizesScopeQueryAndRecordFields(t *testing.T) {
 	service := newServiceForTest(t, source, &recordingAuthorizer{})
 	page, err := service.List(context.Background(), "contact_categories", Query{
 		Search:  "  Ana  ",
-		Filters: []Filter{{Field: "name", Operator: FilterContains, Value: "an"}},
+		Filters: []Filter{{Field: "name", Operator: FilterIn, Values: []Value{"Ana", "Bruno"}}},
 	})
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
@@ -80,11 +80,58 @@ func TestServiceListNormalizesScopeQueryAndRecordFields(t *testing.T) {
 	if source.listQuery.Search != "Ana" || source.listQuery.Page.Number != 1 || source.listQuery.Page.Size != 25 {
 		t.Fatalf("normalized query = %#v", source.listQuery)
 	}
+	if len(source.listQuery.Filters) != 1 || source.listQuery.Filters[0].Operator != FilterIn || len(source.listQuery.Filters[0].Values) != 2 {
+		t.Fatalf("normalized filters = %#v", source.listQuery.Filters)
+	}
 	if got := source.listQuery.Sort; len(got) != 2 || got[0].Field != "name" || got[1].Field != "id" {
 		t.Fatalf("normalized sort = %#v", got)
 	}
 	if _, leaked := page.Records[0].Fields["driver_only"]; leaked {
 		t.Fatalf("List() leaked a non-declared field: %#v", page)
+	}
+}
+
+func TestServicePreservesServerOwnedReadOnlyGridProjection(t *testing.T) {
+	t.Parallel()
+
+	source := &recordingSource{
+		capabilities: serviceCapabilities(),
+		listPage: Page{Records: []Record{{ID: "1", Fields: Fields{
+			"name": "Ana", "active": true, "customer_label": "Acme Ltda.",
+		}}}},
+	}
+	definition := validDefinition("projected_contacts")
+	definition.Source = source
+	definition.Fields = append(definition.Fields, Field{
+		Key: "customer_label", Label: "crud.projected_contacts.customer_label", Type: FieldString,
+		ReadOnly: true, Visible: true,
+	})
+	definition.Grid.Columns = []FieldKey{"name", "customer_label", "active"}
+	definition.Form.Fields = []FieldKey{"name", "active"}
+	registry := NewRegistry()
+	if err := registry.Register(context.Background(), definition); err != nil {
+		t.Fatal(err)
+	}
+	service := newServiceForRegistry(t, registry, source, &recordingAuthorizer{})
+	page, err := service.List(context.Background(), definition.Key, Query{})
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if got := page.Records[0].Fields["customer_label"]; got != "Acme Ltda." {
+		t.Fatalf("joined projection = %#v, want server-owned label", got)
+	}
+	public, err := service.Definition(context.Background(), definition.Key)
+	if err != nil {
+		t.Fatalf("Definition() error = %v", err)
+	}
+	if got := public.Grid.Columns; len(got) != 3 || got[1] != "customer_label" {
+		t.Fatalf("grid projection = %#v", got)
+	}
+	if got := public.Form.Fields; len(got) != 2 || got[0] != "name" || got[1] != "active" {
+		t.Fatalf("form projection = %#v", got)
+	}
+	if _, err := normalizeMutationForAction(context.Background(), Scope{"tenant_id": "tenant-a"}, definition, ActionCreate, Mutation{Fields: Fields{"customer_label": "forged"}}); err == nil {
+		t.Fatal("read-only joined projection accepted in mutation")
 	}
 }
 
@@ -208,6 +255,9 @@ func TestReadValidationRejectsUntrustedQueryShapes(t *testing.T) {
 		{Filters: tooManyFilters},
 		{Filters: []Filter{{Field: "missing", Operator: FilterEqual, Value: "x"}}},
 		{Filters: []Filter{{Field: "name", Operator: FilterIsNull, Value: "not nil"}}},
+		{Filters: []Filter{{Field: "name", Operator: FilterIn}}},
+		{Filters: []Filter{{Field: "name", Operator: FilterIn, Value: "Ana", Values: []Value{"Bruno"}}}},
+		{Filters: []Filter{{Field: "name", Operator: FilterIn, Values: []Value{[]string{"Ana"}}}}},
 		{Filters: []Filter{{Field: "active", Operator: FilterContains, Value: "yes"}}},
 		{Sort: []Sort{{Field: "unknown", Direction: SortAscending}}},
 		{Sort: []Sort{{Field: "name", Direction: "injected"}}},
@@ -225,6 +275,14 @@ func TestReadValidationRejectsUntrustedQueryShapes(t *testing.T) {
 	definition.Fields[0].Sensitive = true
 	if _, err := normalizeQuery(context.Background(), definition, Query{Filters: []Filter{{Field: "name", Operator: FilterEqual, Value: "Ana"}}}); err == nil {
 		t.Fatal("normalizeQuery() accepted a sensitive field filter")
+	}
+	if _, err := normalizeQuery(context.Background(), validDefinition("active_only_categories"), Query{IncludeArchived: true}); err == nil {
+		t.Fatal("normalizeQuery() accepted archived visibility without a Grid declaration")
+	}
+	definition.Grid.ArchiveVisibility = ArchiveVisibilityActiveAndArchived
+	normalized, err := normalizeQuery(context.Background(), definition, Query{IncludeArchived: true})
+	if err != nil || !normalized.IncludeArchived {
+		t.Fatalf("normalizeQuery() archive visibility = %#v, %v", normalized, err)
 	}
 }
 
@@ -255,12 +313,12 @@ func TestReadValidationHandlesCursorAndLookupBoundaries(t *testing.T) {
 	cursor.Delete.Mode = DeleteModeNone
 	cursor.Concurrency.Mode = ConcurrencyNone
 	cursor.UOW = nil
-	cursor.List.Pagination = PaginationDefinition{Mode: PageModeCursor, DefaultSize: 25, AllowedSizes: []uint16{25, 50, 100}}
+	cursor.Grid.Pagination = PaginationDefinition{Mode: PageModeCursor, DefaultSize: 25, AllowedSizes: []uint16{25, 50, 100}}
 	cursor.Source = fakeSource{capabilities: Capabilities{CapabilityCursorPage: {}}}
-	if page, err := normalizePage(cursor.List.Pagination, PageRequest{Cursor: "opaque"}); err != nil || page.Cursor != "opaque" {
+	if page, err := normalizePage(cursor.Grid.Pagination, PageRequest{Cursor: "opaque"}); err != nil || page.Cursor != "opaque" {
 		t.Fatalf("normalizePage() = %#v, %v", page, err)
 	}
-	if _, err := normalizePage(cursor.List.Pagination, PageRequest{Number: 1}); err == nil {
+	if _, err := normalizePage(cursor.Grid.Pagination, PageRequest{Number: 1}); err == nil {
 		t.Fatal("cursor page accepted offset number")
 	}
 

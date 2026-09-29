@@ -4,6 +4,7 @@ COVERAGE_MIN ?= 90
 CLEAR_CRUD_CACHE_ROOT ?= $(if $(TMPDIR),$(TMPDIR),/tmp)/clear-crud
 CLEAR_CRUD_GOCACHE ?= $(CLEAR_CRUD_CACHE_ROOT)/go-build
 COVERAGE_FILE := $(CLEAR_CRUD_CACHE_ROOT)/coverage.out
+GOVULNCHECK ?= $(shell command -v govulncheck 2>/dev/null || printf '%s/bin/govulncheck' "$$(go env GOPATH)")
 
 validate: test coverage security frontend
 
@@ -19,8 +20,8 @@ coverage:
 	awk -v total="$$total" -v minimum="$(COVERAGE_MIN)" 'BEGIN { if (total + 0 < minimum + 0) { printf "coverage %.1f%% is below required %.1f%%\n", total, minimum; exit 1 } printf "coverage %.1f%% meets required %.1f%%\n", total, minimum }'
 
 security:
-	@command -v govulncheck >/dev/null || { echo "govulncheck is required; install golang.org/x/vuln/cmd/govulncheck@latest"; exit 1; }
-	GOCACHE="$(CLEAR_CRUD_GOCACHE)" govulncheck ./...
+	@test -x "$(GOVULNCHECK)" || { echo "govulncheck is required; install golang.org/x/vuln/cmd/govulncheck@latest"; exit 1; }
+	GOCACHE="$(CLEAR_CRUD_GOCACHE)" "$(GOVULNCHECK)" ./...
 
 frontend:
 	npm_config_cache="$(CURDIR)/work/npm-cache" npm ci

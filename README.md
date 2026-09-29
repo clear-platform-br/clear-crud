@@ -12,6 +12,9 @@ Agentes e consumidores devem seguir o [manual de uso](docs/agent-usage.md)
 antes de iniciar um CRUD: ele define o critério objetivo para usar o motor ou
 escrever um caso de uso próprio, sem duplicar a capability no produto.
 
+O [mapa atual de capabilities](docs/capability-map.md) mostra o que já está
+implementado, as limitações conhecidas e o que ainda está no backlog.
+
 ## O que este módulo fará
 
 - registrar recursos fechados no servidor;

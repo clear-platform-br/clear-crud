@@ -36,6 +36,20 @@ func TestRegistryClonesLookupAndEnumDetails(t *testing.T) {
 	}
 }
 
+func TestRegistryPrecompilesFieldPatterns(t *testing.T) {
+	t.Parallel()
+	definition := validDefinition("patterned")
+	definition.Fields[0].Pattern = `^[A-Z].*$`
+	registry := NewRegistry()
+	if err := registry.Register(context.Background(), definition); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	stored, ok := registry.Get(definition.Key)
+	if !ok || len(stored.fieldPatterns) != 1 || stored.fieldPatterns[definition.Fields[0].Key] == nil {
+		t.Fatalf("stored field patterns = %#v, want one compiled pattern", stored.fieldPatterns)
+	}
+}
+
 func TestRegistrySealIsIdempotent(t *testing.T) {
 	t.Parallel()
 	registry := NewRegistry()
