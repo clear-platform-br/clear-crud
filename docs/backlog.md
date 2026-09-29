@@ -176,6 +176,9 @@ ordem dos registros. No clear-crud, essas decisões ficam separadas:
 - `[x]` Ao abrir um registro existente, resolve e mostra o label atual do
   lookup sem exigir nova pesquisa do usuário.
 - `[x]` Defaults estáticos visíveis no formulário de inclusão.
+- `[x]` Campo opcional `Presentation.TitleField` para título contextual do
+  editor Vue, com fallback para os labels da definição e sem efeito sobre
+  contrato ou mutation.
 - `[ ]` Cabeçalho e rodapé fixos com corpo rolável para formulários longos.
 - `[ ]` Seções opcionais do formulário, sem introduzir HTML na definição.
 - `[-]` Não portar `form_additional_html`.
@@ -217,7 +220,8 @@ ordem dos registros. No clear-crud, essas decisões ficam separadas:
 - `[ ]` Criar modo de edição orientado a operador para catálogos auxiliares:
   ocultar metadados técnicos, mostrar somente os valores relevantes ao negócio
   e tornar o mestre-detalhe compreensível para usuários finais; manter o modo
-  técnico completo para desenvolvedores e agentes.
+  técnico completo para desenvolvedores e agentes. Os títulos contextuais do
+  renderer já estão disponíveis, mas não encerram esta melhoria de UX.
 - `[x]` Modo explícito `global` para recursos de referência somente leitura.
 - `[x]` `RegisterAutoGlobalTable` sem `tenant_id` duplicado por tenant.
 - `[x]` Recurso global pode ser alvo de lookup de qualquer CRUD autorizado.

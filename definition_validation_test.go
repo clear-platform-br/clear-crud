@@ -98,9 +98,18 @@ func TestValidateDefinitionCoversStartupBoundaries(t *testing.T) {
 		"invalid page mode":                  {func(definition *Definition) { definition.Grid.Pagination.Mode = "page" }, "grid.pagination.mode"},
 		"default page size must be allowed":  {func(definition *Definition) { definition.Grid.Pagination.DefaultSize = 10 }, "grid.pagination.defaultSize"},
 		"invalid density":                    {func(definition *Definition) { definition.Presentation.Density = "dense" }, "presentation.density"},
-		"invalid delete mode":                {func(definition *Definition) { definition.Delete.Mode = "soft" }, "delete.mode"},
-		"delete mode requires permission":    {func(definition *Definition) { definition.Permissions.Delete = "" }, "permissions.delete"},
-		"offset capability required":         {func(definition *Definition) { definition.Source = fakeSource{capabilities: Capabilities{}} }, "source.capabilities"},
+		"title field must exist":             {func(definition *Definition) { definition.Presentation.TitleField = "missing" }, "presentation.title_field"},
+		"title field must be visible": {func(definition *Definition) {
+			definition.Fields[0].Visible = false
+			definition.Presentation.TitleField = "name"
+		}, "presentation.title_field"},
+		"title field must not be sensitive": {func(definition *Definition) {
+			definition.Fields[0].Sensitive = true
+			definition.Presentation.TitleField = "name"
+		}, "presentation.title_field"},
+		"invalid delete mode":             {func(definition *Definition) { definition.Delete.Mode = "soft" }, "delete.mode"},
+		"delete mode requires permission": {func(definition *Definition) { definition.Permissions.Delete = "" }, "permissions.delete"},
+		"offset capability required":      {func(definition *Definition) { definition.Source = fakeSource{capabilities: Capabilities{}} }, "source.capabilities"},
 		"total capability required": {func(definition *Definition) {
 			definition.Source = fakeSource{capabilities: Capabilities{CapabilityOffsetPage: {}, CapabilityAtomicVersion: {}, CapabilityUnitOfWork: {}, CapabilityArchive: {}}}
 		}, "source.capabilities"},
@@ -187,6 +196,15 @@ func TestValidateDefinitionSupportsExplicitFormProjection(t *testing.T) {
 	var definitionError *DefinitionError
 	if !errors.As(err, &definitionError) || definitionError.Path != "form.fields[0]" {
 		t.Fatalf("form projection error = %v, want form.fields[0]", err)
+	}
+}
+
+func TestValidateDefinitionAllowsVisibleNonSensitiveTitleField(t *testing.T) {
+	t.Parallel()
+	definition := validDefinition("contextual_categories")
+	definition.Presentation.TitleField = "name"
+	if err := ValidateDefinition(context.Background(), definition); err != nil {
+		t.Fatalf("ValidateDefinition() error = %v", err)
 	}
 }
 

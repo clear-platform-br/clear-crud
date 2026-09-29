@@ -26,6 +26,11 @@ describe('HttpCrudClient', () => {
     await expect(client.definition('contacts')).resolves.toMatchObject({ Fields: [{ Lookup: { MinSearchLength: 3 } }, { Lookup: { MinSearchLength: 2 } }] })
   })
 
+  it('normalizes the optional contextual title field', async () => {
+    const client = new HttpCrudClient({ fetch: async () => response(200, { data: { Key: 'catalogs', Labels: {}, Fields: [], Details: [], Grid: {}, Form: {}, Presentation: { Collection: 'table', Density: 'comfortable', TitleField: 'title' }, Actions: [] } }) })
+    await expect(client.definition('catalogs')).resolves.toMatchObject({ Presentation: { TitleField: 'title' } })
+  })
+
   it('normalizes the Go HTTP envelope and its exported field names', async () => {
     const fetcher: typeof fetch = async () => response(200, {
       data: [{ ID: '1', Version: 2, Fields: { name: 'Ana' }, Details: { destinations: [{ ID: '2', Version: 1, Fields: { address: 'ana@example.com' } }] } }],

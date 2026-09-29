@@ -170,6 +170,8 @@ sqladapter.WithLookup("state_id", crud.LookupDefinition{
 // Contract: clear.catalog.auxiliary.v1
 // 2. Tabela pai: o grid mostra somente o nome do catálogo.
 // 3. Tabela filha: options guarda os itens e recebe o vínculo pelo catalog_id.
+// 3.1 Contexto: o modal de uma tabela existente usa este campo no título.
+catalogs.Presentation.TitleField = "title"
 catalogs.Details = []crud.DetailDefinition{{
   Key: "options", Resource: options.Key, ParentField: "catalog_id",
   Maximum: 99, AllowCreate: true, AllowUpdate: true, AllowDelete: true,

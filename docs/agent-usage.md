@@ -492,6 +492,13 @@ contexto visual do produto e chave do recurso; o renderer consulta a definição
 e usa o transporte oficial. O produto não implementa listagem, formulário,
 paginação, busca, mutação ou mensagens CRUD em paralelo.
 
+Se o editor precisar identificar o registro pai selecionado, declare o campo
+`Presentation.TitleField` na definição. O renderer Vue usa seu valor no modal
+de edição e cai no label fixo na inclusão ou quando o valor está vazio. O campo
+precisa ser visível e não sensível. Essa é uma extensão visual server-owned:
+não altera escopo, permissões, mutation ou dados persistidos. Não crie títulos
+hardcoded no frontend nem use o nome de uma linha como regra do motor.
+
 ### 5. Valide a integração
 
 O mínimo obrigatório é:

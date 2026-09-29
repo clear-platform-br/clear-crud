@@ -80,6 +80,14 @@ function displayValue(field: Field, value: Value | undefined): string | number {
 function activeRows(detail: DetailDefinition, editor: EditorDraft) { return (editor.details[detail.Key] ?? []).map((row, index) => ({ row, index })).filter(({ row }) => !row.delete) }
 function fieldDisabled(field: Field, editor: EditorDraft, submitting: boolean): boolean { return submitting || Boolean(editor.id && field.CreateOnly) }
 function required(field: Field, editing = false): boolean { return field.Required && field.Type !== 'boolean' && !editing }
+function editorTitle(definition: PublicDefinition, editor: EditorDraft, translate: Translate): string {
+  if (editor.id && definition.Presentation.TitleField) {
+    const value = editor.fields[definition.Presentation.TitleField]
+    if (typeof value === 'string' && value.trim()) return value
+    if (typeof value === 'number') return String(value)
+  }
+  return translate(editor.id ? definition.Labels.Singular : definition.Labels.Title)
+}
 function lookupDependencies(values: Record<string, Value>, field: Field): Record<string, Value> {
   const dependencies = field.Lookup?.Dependencies ?? []
   return Object.fromEntries(dependencies.filter((key) => values[key] !== null && values[key] !== undefined && values[key] !== '').map((key) => [key, values[key]]))
@@ -100,7 +108,7 @@ function handleFormKeydown(event: KeyboardEvent) {
 <template>
   <section class="crud-editor-backdrop" data-clear-crud-part="editor">
     <form class="crud-editor" @keydown="handleFormKeydown" @submit.prevent="emit('submit')">
-      <header class="crud-editor-header"><h2 class="crud-editor-title">{{ translate(editor.id ? definition.Labels.Singular : definition.Labels.Title) }}</h2><button class="crud-icon-action" type="button" :aria-label="messages.cancel" :title="messages.cancel" @click="emit('cancel')">×</button></header>
+      <header class="crud-editor-header"><h2 class="crud-editor-title">{{ editorTitle(definition, editor, translate) }}</h2><button class="crud-icon-action" type="button" :aria-label="messages.cancel" :title="messages.cancel" @click="emit('cancel')">×</button></header>
       <p v-if="feedback?.kind !== 'success'" class="crud-error-summary" role="alert">{{ feedback ? translate(feedback.message) : '' }}</p>
       <div class="crud-form-fields">
         <label v-for="field in formFields(definition)" :key="field.Key" class="crud-field" :data-clear-crud-field="field.Key">

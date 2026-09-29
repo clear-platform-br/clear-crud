@@ -237,6 +237,9 @@ const (
 type Presentation struct {
 	Collection CollectionMode
 	Density    Density
+	// TitleField identifies the non-sensitive field used to contextualize an
+	// existing record editor. Empty keeps the definition label as the title.
+	TitleField FieldKey `json:",omitempty"`
 }
 
 // ConcurrencyMode controls write-conflict behavior.
