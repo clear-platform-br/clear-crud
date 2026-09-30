@@ -113,6 +113,8 @@ ordem dos registros. No clear-crud, essas decisões ficam separadas:
 - `[x]` Defaults estáticos por campo, incluindo literais seguros obtidos do
   schema e defaults explícitos do programador; expressões dinâmicas continuam
   sob responsabilidade do adapter.
+- `[x]` Aplicar default estático também a campo técnico invisível, sem publicar
+  o campo no renderer nem aceitá-lo do navegador.
 - `[x]` Validadores declarativos de padrão/regex com mensagens localizáveis;
   expressões RE2 server-owned são compiladas no bootstrap e aplicadas pelo
   core a valores string-backed, sem aceitar regex pelo HTTP.
@@ -179,6 +181,10 @@ ordem dos registros. No clear-crud, essas decisões ficam separadas:
 - `[x]` Campo opcional `Presentation.TitleField` para título contextual do
   editor Vue, com fallback para os labels da definição e sem efeito sobre
   contrato ou mutation.
+- `[x]` Resolver `DetailDefinition.FieldMetadata` para slots filhos já
+  declarados: label literal, tipo e requiredness vêm do pai; slot mapeado sem
+  label fica oculto e não entra na mutation. A convenção atende TdT sem
+  acoplar o core a catálogo ou tabela.
 - `[ ]` Cabeçalho e rodapé fixos com corpo rolável para formulários longos.
 - `[ ]` Seções opcionais do formulário, sem introduzir HTML na definição.
 - `[-]` Não portar `form_additional_html`.

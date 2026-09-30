@@ -73,6 +73,19 @@ substituição, remoção e miniaturas serão habilitados somente por definiçã
 explícita do recurso e por um repositório de armazenamento registrado no
 servidor.
 
+#### Metadados de slots filhos
+
+`DetailDefinition.FieldMetadata` resolve, no client e novamente no servidor,
+metadados do pai para campos filhos que já existem na definição. O client usa
+`DisplayLabel` para um label literal e aplica `Type`/`Required` ao controle;
+nenhum campo é criado dinamicamente. Quando `LabelField` está declarado e seu
+valor está vazio, o slot fica oculto e é removido da mutation. Isso permite que
+um recurso use somente um dos quatro slots fixos sem criar uma tela especial.
+
+O vínculo, o escopo, a autorização e a validação permanecem server-owned. O
+produto consumidor só declara o mapa entre seus campos; não envia esse mapa por
+HTTP e não deve duplicar a resolução em componentes locais.
+
 ## Tema e extensão
 
 Os componentes publicam `data-clear-crud-part` e `data-clear-crud-action`.

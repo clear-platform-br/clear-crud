@@ -1,6 +1,6 @@
 {
   "name": "@clear-platform-br/crud-client",
-  "version": "0.3.0-experimental.1",
+  "version": "0.3.0-experimental.2",
   "type": "module",
   "exports": {
     ".": {

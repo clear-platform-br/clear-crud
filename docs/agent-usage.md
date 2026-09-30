@@ -136,6 +136,12 @@ O adapter pode promover literais seguros do schema, mas expressões como
 `CURRENT_TIMESTAMP` continuam sob responsabilidade do banco/adapter e não
 viram dados ou regras no core.
 
+Um default também pode pertencer a um campo técnico invisível (`Visible: false`)
+quando o consumidor precisa preencher uma coluna interna sem expô-la ao
+operador. Nesse caso o campo não aparece na definição pública nem pode ser
+enviado pelo navegador; o core aplica o literal somente na criação. `Sensitive`
+e `ReadOnly` continuam impedindo defaults estáticos.
+
 Padrões declarativos usam `Field.Pattern` com sintaxe RE2 e, opcionalmente,
 `Field.PatternMessage`; no `AutoTable`, a forma equivalente é
 `sqladapter.WithPattern`. Eles são compilados no bootstrap e validados pelo
@@ -484,6 +490,35 @@ capability para árvore, muitos-para-muitos, filho de filho, documentos com
 workflow ou integração externa. Upload de anexo simples será uma capability
 genérica separada e opt-in; ela ainda não faz parte da release experimental
 atual.
+
+### Tabela de Tabelas (TdT) com campos fixos
+
+Uma tabela pai que descreve os campos dos próprios itens continua sendo um
+mestre-detalhe genérico. O consumidor declara quais campos já existentes no
+filho recebem metadados do pai; o core não conhece catálogo, tabela ou TdT:
+
+```go
+FieldMetadata: []crud.DetailFieldMetadataSource{
+    {Field: "value_1", LabelField: "value_1_label", TypeField: "value_1_type", RequiredField: "value_1_required"},
+    {Field: "value_2", LabelField: "value_2_label", TypeField: "value_2_type", RequiredField: "value_2_required"},
+},
+```
+
+Os slots continuam fixos (`value_1` até `value_4` quando existirem no schema);
+a capability não cria colunas nem altera migrations. O pai fornece o label
+literal, o tipo permitido e a obrigatoriedade. Um slot mapeado cujo label
+esteja vazio fica oculto e não entra na mutation; assim um catálogo de uma
+coluna mostra somente, por exemplo, `Nome`. O primeiro slot continua sendo a
+única exigência do contrato do consumidor, se essa for a regra do produto.
+
+`DisplayLabel` é texto de apresentação, não chave de tradução. O renderer usa
+o texto resolvido no campo filho; labels fixos continuam usando `MessageCode`.
+O servidor repete a resolução para validar tipo, requiredness e campos aceitos,
+portanto o navegador não é a autoridade. O título contextual do pai usa
+`Presentation.TitleField` quando declarado.
+
+Essa convenção também atende outros mestres-detalhes com slots configuráveis;
+os nomes da TdT aparecem somente na definição do consumidor e no demo.
 
 ### 4. Monte a UI oficial
 

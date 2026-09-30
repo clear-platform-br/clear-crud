@@ -60,6 +60,9 @@ func validateMasterDetailDefinitions(registry *Registry) error {
 			if err := validateDetailActions(path, detail, child); err != nil {
 				return err
 			}
+			if err := validateDetailFieldMetadata(parent, index, detail, child); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -106,7 +109,7 @@ func detailPageSize(pagination PaginationDefinition, maximum uint16) uint16 {
 	return 0
 }
 
-func (service *Service) normalizeDetailChanges(ctx context.Context, state readState, details DetailMutations) ([]detailChange, error) {
+func (service *Service) normalizeDetailChanges(ctx context.Context, state readState, parentFields Fields, details DetailMutations) ([]detailChange, error) {
 	if len(details) == 0 {
 		return nil, nil
 	}
@@ -124,6 +127,11 @@ func (service *Service) normalizeDetailChanges(ctx context.Context, state readSt
 		if !ok {
 			return nil, unavailable(nil)
 		}
+		childFields, err := resolveDetailFields(state.definition, detail, child, parentFields)
+		if err != nil {
+			return nil, err
+		}
+		child.Fields = childFields
 		for _, mutation := range mutations {
 			change, err := normalizeDetailChange(ctx, state.scope, detail, child, mutation)
 			if err != nil {

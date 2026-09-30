@@ -1,4 +1,5 @@
 import { CrudRequestError } from './http.js'
+import { resolveDetailFields } from './detail-metadata.js'
 import type { CrudFeedback, CrudRecord, CrudState, CrudTransport, DetailMutation, EditorDraft, Filter, LookupOption, Mutation, PublicDefinition, Value } from './types.js'
 
 export class CrudController {
@@ -36,7 +37,8 @@ export class CrudController {
 
   beginCreate(): void {
     const definition = this.requireDefinition()
-    this.patch({ phase: 'editing', editor: { fields: blankFields(definition.Fields), details: blankDetails(definition) }, feedback: undefined })
+    const fields = blankFields(definition.Fields)
+    this.patch({ phase: 'editing', editor: { fields, details: blankDetails(definition), detailFields: effectiveDetailFields(definition, fields) }, feedback: undefined })
   }
 
   async beginEdit(record: CrudRecord): Promise<void> {
@@ -53,14 +55,14 @@ export class CrudController {
   updateField(key: string, value: Value): void {
     if (!this.state.editor) return
     const fields = clearLookupDependents(this.requireDefinition().Fields, { ...this.state.editor.fields, [key]: value }, key)
-    this.patch({ editor: { ...this.state.editor, fields } })
+    this.patch({ editor: { ...this.state.editor, fields, detailFields: effectiveDetailFields(this.requireDefinition(), fields) } })
   }
   updateDetail(key: string, index: number, field: string, value: Value): void {
     const editor = this.requireEditor(); const rows = [...(editor.details[key] ?? [])]; const detail = this.requireDefinition().Details.find((item) => item.Key === key); if (!detail || !rows[index]) return
-    const fields = clearLookupDependents(detail.Fields, { ...rows[index].fields, [field]: value }, field)
+    const fields = clearLookupDependents(editor.detailFields?.[key] ?? detail.Fields, { ...rows[index].fields, [field]: value }, field)
     rows[index] = { ...rows[index], fields }; this.patch({ editor: { ...editor, details: { ...editor.details, [key]: rows } } })
   }
-  addDetail(key: string): void { const editor = this.requireEditor(); const detail = this.requireDefinition().Details.find((item) => item.Key === key); if (!detail || editor.details[key].filter((row) => !row.delete).length >= detail.Maximum) return; this.patch({ editor: { ...editor, details: { ...editor.details, [key]: [...editor.details[key], { fields: blankFields(detail.Fields) }] } } }) }
+  addDetail(key: string): void { const editor = this.requireEditor(); const detail = this.requireDefinition().Details.find((item) => item.Key === key); const fields = editor.detailFields?.[key] ?? detail?.Fields; if (!detail || !fields || editor.details[key].filter((row) => !row.delete).length >= detail.Maximum) return; this.patch({ editor: { ...editor, details: { ...editor.details, [key]: [...editor.details[key], { fields: blankFields(fields) }] } } }) }
   removeDetail(key: string, index: number): void { const editor = this.requireEditor(); const rows = [...editor.details[key]]; const row = rows[index]; if (!row.id) rows.splice(index, 1); else rows[index] = { ...row, delete: true }; this.patch({ editor: { ...editor, details: { ...editor.details, [key]: rows } } }) }
 
   async submit(): Promise<void> {
@@ -69,7 +71,7 @@ export class CrudController {
     if (Object.keys(localErrors).length) { this.patch({ phase: 'validation_error', feedback: { kind: 'error', message: 'crud.ui.validation', fields: localErrors } }); return }
     const request = this.beginRequest(); this.patch({ phase: 'submitting', feedback: undefined })
     try {
-      const mutation: Mutation = { fields: mutationFields(this.requireDefinition(), editor), details: editor.details }
+      const mutation: Mutation = { fields: mutationFields(this.requireDefinition(), editor), details: mutationDetails(this.requireDefinition(), editor) }
       const record = editor.id ? await this.transport.update(this.resource, editor.id, editor.version ?? 0, mutation, request.signal) : await this.transport.create(this.resource, mutation, request.signal)
       if (this.request !== request) return
       this.patch({ phase: 'success', editor: undefined, feedback: { kind: 'success', message: 'crud.ui.saved' } })
@@ -109,7 +111,7 @@ export class CrudController {
   }
 }
 
-function blankFields(fields: PublicDefinition['Fields']): Record<string, Value> { return Object.fromEntries(fields.filter((field) => !field.ReadOnly).map((field) => [field.Key, field.Default !== undefined ? field.Default : field.Type === 'boolean' ? false : null])) }
+function blankFields(fields: PublicDefinition['Fields']): Record<string, Value> { return Object.fromEntries(fields.filter((field) => !field.ReadOnly && field.Visible).map((field) => [field.Key, field.Default !== undefined ? field.Default : field.Type === 'boolean' ? false : null])) }
 function clearLookupDependents(fields: PublicDefinition['Fields'], values: Record<string, Value>, changedKey: string): Record<string, Value> {
   const next = { ...values }
   const pending = [changedKey]
@@ -124,7 +126,9 @@ function clearLookupDependents(fields: PublicDefinition['Fields'], values: Recor
   return next
 }
 function blankDetails(definition: PublicDefinition): Record<string, DetailMutation[]> { return Object.fromEntries(definition.Details.map((detail) => [detail.Key, []])) }
+function effectiveDetailFields(definition: PublicDefinition, parentFields: Record<string, Value>): Record<string, PublicDefinition['Details'][number]['Fields']> { return Object.fromEntries(definition.Details.map((detail) => [detail.Key, resolveDetailFields(detail, parentFields)])) }
 function recordToDraft(record: CrudRecord, definition: PublicDefinition): EditorDraft {
+  const detailFields = effectiveDetailFields(definition, record.Fields)
   return {
     id: record.ID,
     version: record.Version,
@@ -134,9 +138,10 @@ function recordToDraft(record: CrudRecord, definition: PublicDefinition): Editor
       (record.Details?.[detail.Key] ?? []).map((child) => ({
         id: child.ID,
         version: child.Version,
-        fields: recordFields(detail.Fields, child.Fields),
+        fields: recordFields(detailFields[detail.Key] ?? detail.Fields, child.Fields),
       })),
     ])),
+    detailFields,
   }
 }
 function recordFields(definition: PublicDefinition['Fields'], values: Record<string, Value>): Record<string, Value> {
@@ -155,12 +160,21 @@ function validateDraft(definition: PublicDefinition, draft: EditorDraft): Record
     const rows = draft.details[detail.Key] ?? []
     const count = rows.filter((row) => !row.delete).length
     if (count < detail.Minimum || count > detail.Maximum) errors[detail.Key] = 'crud.detail.cardinality'
-    for (const row of rows) for (const field of detail.Fields) if (!row.delete) validateField(errors, `${detail.Key}.${field.Key}`, field, row.fields[field.Key])
+    for (const row of rows) for (const field of draft.detailFields?.[detail.Key] ?? detail.Fields) if (!row.delete) validateField(errors, `${detail.Key}.${field.Key}`, field, row.fields[field.Key])
   }
   return errors
 }
 function mutationFields(definition: PublicDefinition, draft: EditorDraft): Record<string, Value> {
   return Object.fromEntries(Object.entries(draft.fields).filter(([key]) => !draft.id || !definition.Fields.find((field) => field.Key === key)?.CreateOnly))
+}
+function mutationDetails(definition: PublicDefinition, draft: EditorDraft): Record<string, DetailMutation[]> {
+  return Object.fromEntries(definition.Details.map((detail) => [detail.Key, (draft.details[detail.Key] ?? []).map((row) => ({
+    ...row,
+    fields: Object.fromEntries(Object.entries(row.fields).filter(([key]) => {
+      const field = draft.detailFields?.[detail.Key]?.find((candidate) => candidate.Key === key) ?? detail.Fields.find((candidate) => candidate.Key === key)
+      return field !== undefined && field.Visible && !field.ReadOnly
+    })),
+  }))]))
 }
 function validateField(errors: Record<string, string>, key: string, field: PublicDefinition['Fields'][number], value: Value | undefined): void {
   if (field.ReadOnly || empty(value)) { if (field.Required && !field.ReadOnly) errors[key] = 'crud.field.required'; return }

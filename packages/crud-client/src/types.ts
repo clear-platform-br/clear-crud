@@ -8,6 +8,7 @@ export type Value = string | number | boolean | null
 export interface Field {
   Key: string
   Label: string
+  DisplayLabel?: string
   Help?: string
   Type: FieldType
   Required: boolean
@@ -42,11 +43,19 @@ export interface DetailDefinition {
   Resource: string
   Labels: { Title: string; Singular: string; Help?: string }
   Fields: Field[]
+  FieldMetadata?: DetailFieldMetadataSource[]
   Minimum: number
   Maximum: number
   AllowCreate: boolean
   AllowUpdate: boolean
   AllowDelete: boolean
+}
+
+export interface DetailFieldMetadataSource {
+  Field: string
+  LabelField?: string
+  TypeField?: string
+  RequiredField?: string
 }
 
 export interface PublicDefinition {
@@ -133,6 +142,7 @@ export interface EditorDraft {
   version?: number
   fields: Record<string, Value>
   details: Record<string, DetailMutation[]>
+  detailFields?: Record<string, Field[]>
 }
 
 export interface CrudFeedback {

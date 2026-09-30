@@ -245,8 +245,17 @@ func registerAuxiliaryCatalogDemo(ctx context.Context, database *sql.DB, registr
 	}
 
 	// 3. Relação: conecte pai e filhos pelo contrato genérico de detalhes.
-	catalogs.Details = []crud.DetailDefinition{{Key: "options", Resource: options.Key, ParentField: "catalog_id", Maximum: 99, AllowCreate: true, AllowUpdate: true, AllowDelete: true}}
-	// 3.1 Contexto: mostre o nome da tabela pai ao editar seus itens.
+	// 3.1 Metadados: os quatro slots continuam fixos no item; o catálogo só
+	// fornece labels, tipos e requiredness para os slots declarados.
+	catalogs.Details = []crud.DetailDefinition{{
+		Key: "options", Resource: options.Key, ParentField: "catalog_id", Maximum: 99,
+		AllowCreate: true, AllowUpdate: true, AllowDelete: true,
+		FieldMetadata: []crud.DetailFieldMetadataSource{
+			{Field: "value_1", LabelField: "value_1_label", TypeField: "value_1_type", RequiredField: "value_1_required"},
+			{Field: "value_2", LabelField: "value_2_label", TypeField: "value_2_type", RequiredField: "value_2_required"},
+		},
+	}}
+	// 3.2 Contexto: mostre o nome da tabela pai ao editar seus itens.
 	catalogs.Presentation.TitleField = "title"
 
 	// 4. Registro: publique os dois recursos sem rota específica de catálogo.

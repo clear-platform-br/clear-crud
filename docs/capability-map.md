@@ -12,12 +12,12 @@ ou renderer, e `-` significa que ainda não deve ser usado.
 | Registro | Definições server-owned, validação no bootstrap, cópia defensiva e registry lacrado. |
 | Escopo | Recursos tenant-scoped ou global explícitos; o navegador nunca escolhe tenant. |
 | Autorização | Permissão por ação e revalidação backend antes de leitura e mutação. |
-| Campos | Tipos escalares, required por default, `Optional`, defaults estáticos de criação, limites de tamanho/faixa, sensibilidade, somente leitura, `create_only`, padrões RE2 declarativos com mensagens localizáveis e presets públicos `crud.Pattern*` para formatos recorrentes. |
+| Campos | Tipos escalares, required por default, `Optional`, defaults estáticos de criação inclusive em campos técnicos invisíveis, limites de tamanho/faixa, sensibilidade, somente leitura, `create_only`, padrões RE2 declarativos com mensagens localizáveis e presets públicos `crud.Pattern*` para formatos recorrentes. |
 | Grid | Projeção/ordem por `Grid.Columns`, busca textual global server-side e filtros automáticos por coluna via `Query.Filters`, ordenação determinística, paginação offset no HTTP atual e limite máximo de 100; no `AutoTable`, a ordem física do banco é preservada quando não há projeção explícita. Archive permanece `active_only` por default; `Grid.ArchiveVisibility` pode habilitar o toggle compacto `Excluídos`, com linhas arquivadas somente para leitura, selo `Excluído` na coluna de ações e faixa visual dedicada. |
-| Form | `Form.Fields`, um campo por linha, defaults estáticos visíveis na inclusão, validação local e server-side, enum, booleano e lookup. |
+| Form | `Form.Fields`, um campo por linha, defaults estáticos visíveis na inclusão, validação local e server-side, enum, booleano, lookup e resolução de metadados de campos filhos fixos por valores do pai. |
 | Mutação | Create/update/delete versionados, `UnitOfWork`, auditoria obrigatória e hooks tipados. |
 | Exclusão | Nenhuma ação por default; archive e hard delete somente por declaração explícita. |
-| Mestre-detalhe | Uma coleção filha direta, com cardinalidade e mutation transacional; sem árvore ou netos. |
+| Mestre-detalhe | Uma coleção filha direta, com cardinalidade, mutation transacional e `DetailFieldMetadataSource` para label/tipo/requiredness server-owned de slots já declarados; slot mapeado sem label fica oculto; sem árvore ou netos. |
 | Lookup | Valor separado de label, dependências dinâmicas, filtros fixos server-owned por lista tipada (igualdade ou pertencimento), busca, primeira página limitada, cache bounded (512 entradas/5 min por default) e resolução do label na grade. |
 | Catálogo global | `RegisterAutoGlobalTable` para referência compartilhada, read-only e sem duplicação por tenant. |
 | Metadados | `MetadataSource` promove `CHECK`/enum finito para opções estruturais e pode marcar campos de modelos de leitura como somente leitura durante o bootstrap. |

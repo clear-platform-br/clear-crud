@@ -141,15 +141,16 @@ func validateTrustedScope(requirements ScopeRequirements, scope Scope) error {
 
 // PublicDetailDefinition contains renderer-safe metadata for one child collection.
 type PublicDetailDefinition struct {
-	Key         DetailKey
-	Resource    ResourceKey
-	Labels      Labels
-	Fields      []Field
-	Minimum     uint16
-	Maximum     uint16
-	AllowCreate bool
-	AllowUpdate bool
-	AllowDelete bool
+	Key           DetailKey
+	Resource      ResourceKey
+	Labels        Labels
+	Fields        []Field
+	FieldMetadata []DetailFieldMetadataSource `json:",omitempty"`
+	Minimum       uint16
+	Maximum       uint16
+	AllowCreate   bool
+	AllowUpdate   bool
+	AllowDelete   bool
 }
 
 func publicDefinition(ctx context.Context, state readState, authorizer Authorizer, registry *Registry) PublicDefinition {
@@ -178,7 +179,7 @@ func publicDefinition(ctx context.Context, state readState, authorizer Authorize
 		if !ok || authorizer.Authorize(ctx, state.principal, child.Key, ActionRead, nil) != nil {
 			continue
 		}
-		public := PublicDetailDefinition{Key: detail.Key, Resource: detail.Resource, Labels: child.Labels, Minimum: detail.Minimum, Maximum: detail.Maximum}
+		public := PublicDetailDefinition{Key: detail.Key, Resource: detail.Resource, Labels: child.Labels, FieldMetadata: append([]DetailFieldMetadataSource(nil), detail.FieldMetadata...), Minimum: detail.Minimum, Maximum: detail.Maximum}
 		for _, field := range child.Fields {
 			if field.Key != detail.ParentField && field.Visible {
 				public.Fields = append(public.Fields, publicField(field))

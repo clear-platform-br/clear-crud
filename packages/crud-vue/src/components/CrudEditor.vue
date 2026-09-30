@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, shallowRef } from 'vue'
+import { resolveDetailFields } from '@clear-platform-br/crud-client'
 import type { CrudFeedback, DetailDefinition, EditorDraft, Field, PublicDefinition, Value } from '@clear-platform-br/crud-client'
 import CrudLookupField from './CrudLookupField.vue'
 import type { CrudMessages, Translate } from '../messages.js'
@@ -78,6 +79,8 @@ function displayValue(field: Field, value: Value | undefined): string | number {
   return Number.isNaN(date.getTime()) ? value : date.toISOString().slice(0, 16)
 }
 function activeRows(detail: DetailDefinition, editor: EditorDraft) { return (editor.details[detail.Key] ?? []).map((row, index) => ({ row, index })).filter(({ row }) => !row.delete) }
+function fieldsForDetail(detail: DetailDefinition, editor: EditorDraft): Field[] { return (editor.detailFields?.[detail.Key] ?? resolveDetailFields(detail, editor.fields)).filter((field) => field.Visible && !field.ReadOnly) }
+function fieldLabel(field: Field, translate: Translate): string { return field.DisplayLabel?.trim() || translate(field.Label) }
 function fieldDisabled(field: Field, editor: EditorDraft, submitting: boolean): boolean { return submitting || Boolean(editor.id && field.CreateOnly) }
 function required(field: Field, editing = false): boolean { return field.Required && field.Type !== 'boolean' && !editing }
 function editorTitle(definition: PublicDefinition, editor: EditorDraft, translate: Translate): string {
@@ -137,21 +140,21 @@ function handleFormKeydown(event: KeyboardEvent) {
       <fieldset v-for="detail in definition.Details" :key="detail.Key" class="crud-detail" :data-clear-crud-detail="detail.Key">
         <legend class="crud-detail-title">{{ translate(detail.Labels.Title) }}</legend>
         <div v-for="entry in activeRows(detail, editor)" :key="entry.row.id ?? entry.index" class="crud-detail-row">
-          <label v-for="field in detail.Fields" :key="field.Key" class="crud-field">
-            <span class="crud-field-label">{{ translate(field.Label) }}<span v-if="field.Help" class="crud-field-hint" :aria-label="translate(field.Help)" :title="translate(field.Help)">?</span></span>
+          <label v-for="field in fieldsForDetail(detail, editor)" :key="field.Key" class="crud-field">
+            <span class="crud-field-label">{{ fieldLabel(field, translate) }}<span v-if="field.Help" class="crud-field-hint" :aria-label="translate(field.Help)" :title="translate(field.Help)">?</span></span>
             <CrudLookupField v-if="field.Type === 'lookup'" :field="field" :resource="detail.Resource" :dependencies="lookupDependencies(entry.row.fields, field)" :model-value="entry.row.fields[field.Key]" :disabled="submitting" :messages="messages" :translate="translate" :lookup="lookup" @update="emit('updateDetail', detail.Key, entry.index, field.Key, $event)" />
             <div v-else-if="field.Type === 'enum'" class="crud-enum-control">
-              <select v-if="enumControl(field) === 'select'" class="crud-input crud-enum-select" :value="enumIndex(field, entry.row.fields[field.Key])" :required="required(field)" :disabled="submitting" :aria-label="translate(field.Label)" @change="emit('updateDetail', detail.Key, entry.index, field.Key, enumValue(field, $event))">
+              <select v-if="enumControl(field) === 'select'" class="crud-input crud-enum-select" :value="enumIndex(field, entry.row.fields[field.Key])" :required="required(field)" :disabled="submitting" :aria-label="fieldLabel(field, translate)" @change="emit('updateDetail', detail.Key, entry.index, field.Key, enumValue(field, $event))">
                 <option value="" disabled>{{ messages.selectOption ?? 'Selecione…' }}</option>
                 <option v-for="(option, optionIndex) in field.Enum ?? []" :key="String(option.Value)" :value="optionIndex">{{ translate(option.Label) }}</option>
               </select>
-              <div v-else-if="enumControl(field) === 'radio'" class="crud-enum crud-enum--radio" role="radiogroup" :aria-label="translate(field.Label)">
+              <div v-else-if="enumControl(field) === 'radio'" class="crud-enum crud-enum--radio" role="radiogroup" :aria-label="fieldLabel(field, translate)">
                 <label v-for="option in field.Enum ?? []" :key="String(option.Value)" class="crud-radio-option">
                   <input class="crud-radio-input" type="radio" :name="enumGroupName(detail.Resource, field, `${detail.Key}-${entry.index}`)" :value="String(option.Value)" :checked="entry.row.fields[field.Key] === option.Value" :required="required(field)" :disabled="submitting" @change="emit('updateDetail', detail.Key, entry.index, field.Key, option.Value)">
                   <span>{{ translate(option.Label) }}</span>
                 </label>
               </div>
-              <div v-else class="crud-enum" :class="`crud-enum--${enumControl(field)}`" role="radiogroup" :aria-label="translate(field.Label)">
+              <div v-else class="crud-enum" :class="`crud-enum--${enumControl(field)}`" role="radiogroup" :aria-label="fieldLabel(field, translate)">
                 <button v-for="option in field.Enum ?? []" :key="String(option.Value)" class="crud-enum-option" type="button" role="radio" :aria-checked="entry.row.fields[field.Key] === option.Value" :disabled="submitting" @click="emit('updateDetail', detail.Key, entry.index, field.Key, option.Value)">{{ translate(option.Label) }}</button>
               </div>
             </div>

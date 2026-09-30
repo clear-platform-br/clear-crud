@@ -55,6 +55,20 @@ func TestCreateNormalizationAppliesStaticDefaultsWithoutChangingUpdates(t *testi
 	}
 }
 
+func TestCreateNormalizationAppliesStaticDefaultsToHiddenTechnicalFields(t *testing.T) {
+	definition := Definition{Fields: []Field{
+		{Key: "name", Type: FieldString, Visible: true},
+		{Key: "catalog_id", Type: FieldInteger, Visible: false, Default: int64(20)},
+	}}
+	normalized, err := normalizeMutationForAction(context.Background(), Scope{}, definition, ActionCreate, Mutation{Fields: Fields{"name": "State"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalized.Fields["catalog_id"] != int64(20) {
+		t.Fatalf("hidden technical default = %#v, want 20", normalized.Fields["catalog_id"])
+	}
+}
+
 func TestDefinitionRejectsUnsafeStaticDefaults(t *testing.T) {
 	definition := validDefinition("defaulted")
 	definition.Fields[0].Default = int64(1)
@@ -66,5 +80,10 @@ func TestDefinitionRejectsUnsafeStaticDefaults(t *testing.T) {
 	definition.Fields[0].Default = "secret"
 	if err := ValidateDefinition(context.Background(), definition); err == nil {
 		t.Fatal("sensitive default accepted")
+	}
+	definition = validDefinition("hidden_default")
+	definition.Fields = append(definition.Fields, Field{Key: "catalog_id", Label: "crud.catalog_id", Type: FieldInteger, Visible: false, Default: int64(1)})
+	if err := ValidateDefinition(context.Background(), definition); err != nil {
+		t.Fatalf("hidden technical default rejected: %v", err)
 	}
 }

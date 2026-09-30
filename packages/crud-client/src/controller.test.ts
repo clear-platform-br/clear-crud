@@ -80,6 +80,35 @@ describe('CrudController', () => {
     expect(controller.snapshot().editor?.details.destinations[0].fields).toEqual({ address: 'novo@example.com' })
   })
 
+  it('resolves fixed child-slot metadata from the parent draft', async () => {
+    const client = transport()
+    const metadataDefinition: PublicDefinition = {
+      ...definition,
+      Fields: [
+        ...definition.Fields,
+        { Key: 'value_label', Label: 'catalog.value_label', Type: 'string', Required: false, ReadOnly: false, Visible: true, Sensitive: false },
+        { Key: 'value_type', Label: 'catalog.value_type', Type: 'string', Required: false, ReadOnly: false, Visible: true, Sensitive: false },
+        { Key: 'value_required', Label: 'catalog.value_required', Type: 'boolean', Required: false, ReadOnly: false, Visible: true, Sensitive: false },
+      ],
+      Details: [{
+        ...definition.Details[0],
+        Fields: [{ ...definition.Details[0].Fields[0], Key: 'value_1', Label: 'crud.value_1', Type: 'string', Required: false }],
+        FieldMetadata: [{ Field: 'value_1', LabelField: 'value_label', TypeField: 'value_type', RequiredField: 'value_required' }],
+      }],
+    }
+    client.definition = async () => metadataDefinition
+    const controller = new CrudController('contacts', client)
+    await controller.load()
+    controller.beginCreate()
+    controller.updateField('value_label', 'Código')
+    controller.updateField('value_type', 'integer')
+    controller.updateField('value_required', true)
+    controller.addDetail('destinations')
+    const editor = controller.snapshot().editor
+    expect(editor?.detailFields?.destinations[0]).toMatchObject({ DisplayLabel: 'Código', Type: 'integer', Required: true })
+    expect(editor?.details.destinations[0].fields).toEqual({ value_1: null })
+  })
+
   it('submits one explicit master-detail mutation', async () => {
     const client = transport()
     const controller = new CrudController('contacts', client)

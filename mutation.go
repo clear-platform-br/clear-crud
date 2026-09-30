@@ -56,7 +56,7 @@ func normalizeMutationFields(definition Definition, action Action, mutation Muta
 	}
 	if action == ActionCreate {
 		for _, field := range definition.Fields {
-			if field.Default == nil || field.ReadOnly || !field.Visible {
+			if field.Default == nil || field.ReadOnly || field.Sensitive {
 				continue
 			}
 			if _, exists := normalized.Fields[field.Key]; !exists {
