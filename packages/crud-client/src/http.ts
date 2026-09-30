@@ -1,4 +1,4 @@
-import type { CrudRecord, CrudTransport, Field, LookupOption, Mutation, Page, PublicDefinition, Query, Value } from './types.js'
+import type { CrudRecord, CrudTransport, DetailFieldMetadataSource, Field, LookupOption, Mutation, Page, PublicDefinition, Query, Value } from './types.js'
 
 interface Envelope<T> { data: T; meta?: { page?: number; size?: number; total?: number; nextCursor?: string } }
 interface ErrorEnvelope { error?: { code?: string; message?: string; fields?: Record<string, string>; correlationId?: string } }
@@ -128,6 +128,7 @@ function normalizeDefinition(value: unknown): PublicDefinition {
         Key: String(item.Key ?? item.key ?? ''), Resource: String(item.Resource ?? item.resource ?? ''), Labels: normalizeLabels(item.Labels ?? item.labels),
         Fields: asArray(item.Fields ?? item.fields).map(normalizeField), Minimum: Number(item.Minimum ?? item.minimum ?? 0), Maximum: Number(item.Maximum ?? item.maximum ?? 0),
         AllowCreate: Boolean(item.AllowCreate ?? item.allowCreate), AllowUpdate: Boolean(item.AllowUpdate ?? item.allowUpdate), AllowDelete: Boolean(item.AllowDelete ?? item.allowDelete),
+        FieldMetadata: normalizeDetailFieldMetadata(item.FieldMetadata ?? item.fieldMetadata),
       }
     }),
     Grid: normalizeGrid(raw.Grid ?? raw.grid),
@@ -149,7 +150,7 @@ function normalizeRecord(value: unknown): CrudRecord {
 function normalizeField(value: unknown): Field {
   const raw = asObject(value)
   return {
-    Key: String(raw.Key ?? raw.key ?? ''), Label: String(raw.Label ?? raw.label ?? ''), Help: nonEmptyStringOrUndefined(raw.Help ?? raw.help), Type: String(raw.Type ?? raw.type ?? 'string') as Field['Type'],
+    Key: String(raw.Key ?? raw.key ?? ''), Label: String(raw.Label ?? raw.label ?? ''), DisplayLabel: nonEmptyStringOrUndefined(raw.DisplayLabel ?? raw.displayLabel), Help: nonEmptyStringOrUndefined(raw.Help ?? raw.help), Type: String(raw.Type ?? raw.type ?? 'string') as Field['Type'],
     Required: Boolean(raw.Required ?? raw.required), ReadOnly: Boolean(raw.ReadOnly ?? raw.readOnly), CreateOnly: Boolean(raw.CreateOnly ?? raw.createOnly), Visible: Boolean(raw.Visible ?? raw.visible), Sensitive: Boolean(raw.Sensitive ?? raw.sensitive), Default: (raw.Default ?? raw.default) as Value | undefined,
     BooleanDisplay: normalizeBooleanDisplay(raw.BooleanDisplay ?? raw.booleanDisplay),
     EnumControl: normalizeEnumControl(raw.EnumControl ?? raw.enumControl),
@@ -157,6 +158,19 @@ function normalizeField(value: unknown): Field {
     Enum: asArray(raw.Enum ?? raw.enum).map((option) => { const item = asObject(option); return { Value: (item.Value ?? item.value ?? null) as Value, Label: String(item.Label ?? item.label ?? '') } }),
     Lookup: raw.Lookup || raw.lookup ? normalizeLookup(raw.Lookup ?? raw.lookup) : undefined,
   }
+}
+
+function normalizeDetailFieldMetadata(value: unknown): DetailFieldMetadataSource[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  return value.map((source) => {
+    const raw = asObject(source)
+    return {
+      Field: String(raw.Field ?? raw.field ?? ''),
+      LabelField: nonEmptyStringOrUndefined(raw.LabelField ?? raw.labelField),
+      TypeField: nonEmptyStringOrUndefined(raw.TypeField ?? raw.typeField),
+      RequiredField: nonEmptyStringOrUndefined(raw.RequiredField ?? raw.requiredField),
+    }
+  })
 }
 
 function normalizeBooleanDisplay(value: unknown): Field['BooleanDisplay'] {

@@ -43,6 +43,11 @@ release não cria campos nem exige alteração de schema: ela resolve label, tip
 requiredness e visibilidade somente para slots filhos já declarados. Um
 consumidor que não declara o mapa mantém exatamente o mestre-detalhe anterior.
 
+O cliente HTTP normaliza `FieldMetadata` tanto no formato exportado pelo Go
+(`FieldMetadata`, `Field`, `LabelField`...) quanto no formato camelCase. Assim,
+o mesmo contrato chega ao resolvedor do renderer quando a definição vem pela
+rede, e não apenas quando é construída diretamente em TypeScript.
+
 Para o piloto atual, publique a mesma versão experimental do client e do Vue;
 o consumidor deve fixar essa versão pública e não usar `replace`, cópia ou
 renderer local. O core correspondente deve ser publicado antes de o produto
