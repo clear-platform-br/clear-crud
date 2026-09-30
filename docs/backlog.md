@@ -183,8 +183,9 @@ ordem dos registros. No clear-crud, essas decisões ficam separadas:
   contrato ou mutation.
 - `[x]` Resolver `DetailDefinition.FieldMetadata` para slots filhos já
   declarados: label literal, tipo e requiredness vêm do pai; slot mapeado sem
-  label fica oculto e não entra na mutation. A convenção atende TdT sem
-  acoplar o core a catálogo ou tabela.
+  label fica oculto e não entra na mutation. O cliente HTTP preserva o mapa
+  nos formatos PascalCase e camelCase antes da resolução. A convenção atende
+  TdT sem acoplar o core a catálogo ou tabela.
 - `[ ]` Cabeçalho e rodapé fixos com corpo rolável para formulários longos.
 - `[ ]` Seções opcionais do formulário, sem introduzir HTML na definição.
 - `[-]` Não portar `form_additional_html`.

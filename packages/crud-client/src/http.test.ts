@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { HttpCrudClient } from './http.js'
+import { resolveDetailFields } from './detail-metadata.js'
 
 function response(status: number, body: unknown): Response { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }) }
 
@@ -29,6 +30,35 @@ describe('HttpCrudClient', () => {
   it('normalizes the optional contextual title field', async () => {
     const client = new HttpCrudClient({ fetch: async () => response(200, { data: { Key: 'catalogs', Labels: {}, Fields: [], Details: [], Grid: {}, Form: {}, Presentation: { Collection: 'table', Density: 'comfortable', TitleField: 'title' }, Actions: [] } }) })
     await expect(client.definition('catalogs')).resolves.toMatchObject({ Presentation: { TitleField: 'title' } })
+  })
+
+  it('preserves detail field metadata from the Go definition and resolves fixed slots', async () => {
+    const metadata = [1, 2, 3, 4].map((index) => ({ Field: `value_${index}`, LabelField: `value_${index}_label`, TypeField: `value_${index}_type`, RequiredField: `value_${index}_required` }))
+    const client = new HttpCrudClient({ fetch: async () => response(200, { data: {
+      Key: 'catalogs', Labels: {}, Fields: [], Details: [{
+        Key: 'records', Resource: 'catalog_options', Labels: {},
+        Fields: [1, 2, 3, 4].map((index) => ({ Key: `value_${index}`, Label: `crud.value_${index}`, Type: 'string', Required: false, Visible: true, Sensitive: false })),
+        FieldMetadata: metadata, Minimum: 0, Maximum: 99, AllowCreate: true, AllowUpdate: true, AllowDelete: true,
+      }], Grid: {}, Form: {}, Presentation: {}, Actions: [],
+    } }) })
+    const definition = await client.definition('catalogs')
+    expect(definition.Details[0].FieldMetadata).toEqual(metadata)
+    const fields = resolveDetailFields(definition.Details[0], {
+      value_1_label: 'Tipo', value_1_type: 'text', value_1_required: true,
+      value_2_label: 'Grupo', value_2_type: 'text', value_2_required: false,
+      value_3_label: 'Nome', value_3_type: 'text', value_3_required: true,
+      value_4_label: '', value_4_type: 'text', value_4_required: false,
+    })
+    expect(fields.filter((field) => field.Visible).map((field) => field.DisplayLabel)).toEqual(['Tipo', 'Grupo', 'Nome'])
+    expect(fields[0]).toMatchObject({ Type: 'text', Required: true })
+    expect(fields[3].Visible).toBe(false)
+  })
+
+  it('normalizes camelCase detail field metadata', async () => {
+    const client = new HttpCrudClient({ fetch: async () => response(200, { data: {
+      key: 'catalogs', labels: {}, fields: [], details: [{ key: 'records', resource: 'options', labels: {}, fields: [], fieldMetadata: [{ field: 'value_1', labelField: 'value_1_label', typeField: 'value_1_type', requiredField: 'value_1_required' }] }], grid: {}, form: {}, presentation: {}, actions: [],
+    } }) })
+    await expect(client.definition('catalogs')).resolves.toMatchObject({ Details: [{ FieldMetadata: [{ Field: 'value_1', LabelField: 'value_1_label', TypeField: 'value_1_type', RequiredField: 'value_1_required' }] }] })
   })
 
   it('normalizes the Go HTTP envelope and its exported field names', async () => {

@@ -517,6 +517,12 @@ O servidor repete a resolução para validar tipo, requiredness e campos aceitos
 portanto o navegador não é a autoridade. O título contextual do pai usa
 `Presentation.TitleField` quando declarado.
 
+Ao testar uma definição recebida por HTTP, valide o caminho completo
+JSON → definição normalizada → `resolveDetailFields`. Não basta testar somente
+um objeto TypeScript já tipado: o transporte deve preservar `FieldMetadata`
+em PascalCase e camelCase antes de o renderer aplicar labels, tipos,
+obrigatoriedade e visibilidade.
+
 Essa convenção também atende outros mestres-detalhes com slots configuráveis;
 os nomes da TdT aparecem somente na definição do consumidor e no demo.
 
