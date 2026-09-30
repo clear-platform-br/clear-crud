@@ -247,4 +247,26 @@ return sqladapter.RegisterReadModel(ctx, database, registry, definition,
     IDColumn: "id",
   },
 )`,
+  auxiliaryDetailLookup: `// 1. Pai: projete somente o nome do catálogo.
+catalogs.Presentation.TitleField = "title"
+
+// 2. Filho: lookup genérico, sem CRUD independente.
+options.Access = crud.ResourceAccessDetailOnly
+sqladapter.WithLookup("value_1", crud.LookupDefinition{
+  Resource: options.Key,
+  ValueField: "value_1",
+  LabelField: "value_2",
+  FixedFilters: []crud.FixedLookupFilter{
+    {Field: "catalog_id", Values: []crud.Value{"10"}},
+    {Field: "active", Values: []crud.Value{true}},
+  },
+  PageSize: 25,
+})
+
+// 3. Relação: os labels dos slots vêm do pai.
+catalogs.Details = []crud.DetailDefinition{{
+  Key: "options", Resource: options.Key, ParentField: "catalog_id",
+  Maximum: 99, AllowCreate: true, AllowUpdate: true, AllowDelete: true,
+  ParentAccess: &crud.DetailParentAccess{Field: "code", Values: []crud.Value{int64(10)}},
+}}`,
 } as const

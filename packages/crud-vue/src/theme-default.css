@@ -224,9 +224,13 @@ body:has([data-clear-crud-theme="dark"]) { background: #15191e; }
 .crud-field-hint { display: inline-grid; place-items: center; width: 1rem; height: 1rem; margin-left: var(--clear-crud-space-1); border: 1px solid var(--clear-crud-border-default); border-radius: 50%; color: var(--clear-crud-text-secondary); font-size: .6875rem; font-weight: 700; vertical-align: .0625rem; }
 .crud-detail { display: grid; gap: var(--clear-crud-space-3); margin: var(--clear-crud-space-5) 0 0; padding: var(--clear-crud-space-4); border: 0; border-radius: var(--clear-crud-radius-panel); }
 .crud-detail-title { display: block; width: 100%; box-sizing: border-box; padding-bottom: var(--clear-crud-space-3); border-bottom: 3px solid var(--clear-crud-border-emphasis); font-weight: 700; }
-.crud-detail-row { align-items: start; }
-.crud-detail-row + .crud-detail-row { padding-top: var(--clear-crud-space-3); border-top: 1px solid var(--clear-crud-border-emphasis); }
-.crud-detail-row > .crud-icon-action { grid-column: 2; justify-self: start; }
+.crud-detail-table-wrap { min-width: 0; overflow-x: auto; }
+.crud-detail-table { min-width: 100%; }
+.crud-detail-table .crud-table-cell { vertical-align: top; }
+.crud-detail-table .crud-field-error { display: block; margin-top: var(--clear-crud-space-1); }
+.crud-detail-table [data-clear-crud-detail-editing="true"] { background: color-mix(in srgb, var(--clear-crud-action-primary) 5%, var(--clear-crud-surface-panel)); }
+.crud-detail-empty { color: var(--clear-crud-text-secondary); text-align: center; }
+.crud-detail-add { justify-self: start; }
 .crud-editor-footer, .crud-dialog-footer { justify-content: end; margin-top: var(--clear-crud-space-5); }
 
 /* 09. Lookup controls ---------------------------------------------------- */
@@ -280,5 +284,4 @@ body:has([data-clear-crud-theme="dark"]) { background: #15191e; }
   .crud-field { grid-template-columns: 1fr; }
   .crud-field-label { grid-column: 1; grid-row: auto; padding-top: 0; }
   .crud-field > .crud-input, .crud-field > .crud-lookup, .crud-field > .crud-enum, .crud-field > .crud-enum-control, .crud-field > .crud-field-error { grid-column: 1; grid-row: auto; }
-  .crud-detail-row > .crud-icon-action { grid-column: 1; }
 }

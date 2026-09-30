@@ -3,7 +3,7 @@ import { computed, onUnmounted, shallowRef, watch } from 'vue'
 import type { Field, LookupOption, Value } from '@clear-platform-br/crud-client'
 import { ptBR, type CrudMessages, type Translate } from '../messages.js'
 
-const props = withDefaults(defineProps<{ field: Field; resource: string; modelValue: Value; dependencies?: Record<string, Value>; disabled: boolean; messages?: CrudMessages; translate: Translate; lookup: (resource: string, field: string, search: string, dependencies?: Record<string, Value>) => Promise<LookupOption[]> }>(), { messages: () => ptBR })
+const props = withDefaults(defineProps<{ field: Field; resource: string; modelValue: Value; dependencies?: Record<string, Value>; disabled: boolean; ariaLabel?: string; messages?: CrudMessages; translate: Translate; lookup: (resource: string, field: string, search: string, dependencies?: Record<string, Value>) => Promise<LookupOption[]> }>(), { messages: () => ptBR, ariaLabel: undefined })
 const emit = defineEmits<{ update: [value: Value] }>()
 const options = shallowRef<LookupOption[]>([])
 const searchText = shallowRef(String(props.modelValue ?? ''))
@@ -18,6 +18,7 @@ const missingDependency = computed(() => (props.field.Lookup?.Dependencies ?? []
   const value = props.dependencies?.[key]
   return value === null || value === undefined || value === ''
 }))
+const accessibleLabel = computed(() => props.ariaLabel || props.translate(props.field.Label))
 const lookupPageSize = computed(() => props.field.Lookup?.PageSize ?? 25)
 const lookupSearchHint = computed(() => (props.messages.lookupSearchHint ?? 'A lista inicial mostra até {size} opções. Digite para buscar outras.').replace('{size}', String(lookupPageSize.value)))
 const lookupMinSearchLength = computed(() => {
@@ -114,7 +115,7 @@ onUnmounted(() => { if (timeout) clearTimeout(timeout) })
 <template>
   <div class="crud-lookup" data-clear-crud-part="lookup-field">
     <div class="crud-lookup-control">
-      <input class="crud-input" :value="searchText" type="text" autocomplete="off" :disabled="disabled || missingDependency" :aria-label="translate(field.Label)" role="combobox" :aria-expanded="showOptions" aria-autocomplete="list" @input="search(($event.target as HTMLInputElement).value)" @keydown="handleKeydown">
+      <input class="crud-input" :value="searchText" type="text" autocomplete="off" :disabled="disabled || missingDependency" :aria-label="accessibleLabel" role="combobox" :aria-expanded="showOptions" aria-autocomplete="list" @input="search(($event.target as HTMLInputElement).value)" @keydown="handleKeydown">
       <button class="crud-lookup-toggle" type="button" :disabled="disabled || missingDependency" :aria-label="props.messages.lookupOptions ?? 'Abrir opções'" :title="props.messages.lookupOptions ?? 'Abrir opções'" :aria-expanded="showOptions" @click="openAll">⌄</button>
     </div>
     <p v-if="missingDependency" class="crud-lookup-message">{{ props.messages.lookupDependencyRequired ?? 'Escolha uma opção primeiro.' }}</p>

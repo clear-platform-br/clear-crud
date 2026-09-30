@@ -75,14 +75,28 @@ parent.Details = []crud.DetailDefinition{{
 }}
 ```
 
-O core bloqueia `Definition`, `List`, `Get`, `Lookup`, `Create`, `Update` e
-`Delete` diretos do filho com `crud.error.forbidden`. Dentro do pai, a coleção
-continua plenamente editável quando o campo server-owned do pai tem um dos
-valores declarados. Quando não tem, os filhos não são carregados e qualquer
-mutation filha explícita é recusada. A condição nunca vem do navegador, não
-cria filtro local, endpoint paralelo ou regra de TdT. O modo `detail-only` deve
-ser usado somente por um `DetailDefinition` declarado; um filho não pode ficar
-órfão no registry.
+O core bloqueia `List`, `Get`, `Create`, `Update` e `Delete` diretos do filho
+com `crud.error.forbidden`. A definição pública e os lookups declarados do
+filho continuam disponíveis como metadados seguros para o renderer resolver
+labels dentro do detalhe; ela não publica ações independentes. Dentro do pai,
+a coleção continua plenamente editável quando o campo server-owned do pai tem
+um dos valores declarados. Quando não tem, os filhos não são carregados e
+qualquer mutation filha explícita é recusada. A condição nunca vem do
+navegador, não cria filtro local, endpoint paralelo ou regra de TdT. O modo
+`detail-only` deve ser usado somente por um `DetailDefinition` declarado; um
+filho não pode ficar órfão no registry.
+
+No renderer oficial, essa diferença também é preservada por registro: uma
+coleção presente em `Record.Details` pode estar vazia e continua disponível para
+inclusão; uma coleção omitida pelo servidor não é renderizada nem enviada numa
+mutation. Assim um pai que não atende `ParentAccess` não exibe um botão de
+inclusão que inevitavelmente seria recusado pelo backend.
+
+`detail-only` não escolhe quais linhas do pai podem editar: ele só bloqueia a
+rota independente do filho. Para que todos os pais tenham sua própria coleção
+editável, declare o filho como `detail-only` e não informe `ParentAccess`.
+Informe `ParentAccess` apenas quando houver uma política real que bloqueie a
+coleção em parte dos registros pais.
 
 Ainda não existe um predicado genérico para manter uma rota independente do
 filho e, ao mesmo tempo, consultar automaticamente uma política do pai. Se
@@ -535,6 +549,13 @@ filho continua sendo um recurso registrado, com seus próprios campos,
 permissões e adapter. A definição do pai informa a coleção, o recurso filho,
 o campo interno de vínculo e os limites mínimo/máximo. O campo de vínculo é
 invisível e somente leitura: o motor o preenche; a tela nunca o envia.
+
+No renderer Vue padrão, a coleção filha aparece como uma tabela dentro do
+editor do pai, não como uma sequência de até 99 formulários abertos. Cada linha
+usa as colunas dos campos filhos e as ações declaradas: `Editar` abre somente a
+linha escolhida, `Salvar` confirma seus valores no draft, `Cancelar` descarta a
+edição da linha e `Remover` marca a exclusão. `Adicionar item` cria uma linha e
+já a coloca em edição. A mutation continua sendo única e transacional no pai.
 
 Na mutation, a coleção informa explicitamente cada inclusão, edição versionada
 ou remoção. Pai, filhos e auditoria usam a mesma `UnitOfWork`. Não use esta

@@ -12,6 +12,9 @@ npm run dev --workspace clear-crud-disposable-demo-web
 ```
 
 Abra `http://127.0.0.1:5173`. O Vite encaminha `/api` para o host Go local.
+Se a porta padrão 8088 estiver ocupada, suba o Go em outra porta e informe o
+destino ao Vite, por exemplo `CLEAR_CRUD_DEMO_ADDR=127.0.0.1:8080` no Go e
+`CLEAR_CRUD_DEMO_API=http://127.0.0.1:8080` no comando do frontend.
 A primeira grade usa a definição mínima, passando somente o nome de uma tabela
 convencional; campos, tipos, busca, ordenação, paginação e formulário são
 gerados pelos defaults. A segunda reutiliza a mesma tabela, mas limita a página

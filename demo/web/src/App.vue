@@ -16,6 +16,7 @@ const readModelResource = 'clear_crud_reference_read_model_demo'
 const auxiliaryCatalogResource = 'clear_crud_auxiliary_catalogs'
 const auxiliaryCatalogLookupResource = 'clear_crud_auxiliary_catalog_lookup_demo'
 const auxiliaryCatalogChannelLookupResource = 'clear_crud_auxiliary_catalog_channel_lookup_demo'
+const auxiliaryDetailLookupResource = 'clear_crud_auxiliary_catalog_detail_lookup_demo'
 const client = new HttpCrudClient({ baseUrl: '/api/v1/crud' })
 
 const labels: Record<string, string> = {
@@ -43,8 +44,12 @@ const labels: Record<string, string> = {
   [`crud.${auxiliaryCatalogLookupResource}.singular`]: 'Item da TdT',
   [`crud.${auxiliaryCatalogChannelLookupResource}.title`]: 'Lookup do catálogo Canais',
   [`crud.${auxiliaryCatalogChannelLookupResource}.singular`]: 'Uso do catálogo Canais',
+  [`crud.${auxiliaryDetailLookupResource}.title`]: 'Lookup no detalhe da TdT',
+  [`crud.${auxiliaryDetailLookupResource}.singular`]: 'Catálogo com lookup no detalhe',
   'crud.clear_crud_auxiliary_catalog_options.title': 'Itens da TdT',
   'crud.clear_crud_auxiliary_catalog_options.singular': 'Item da TdT',
+  'crud.clear_crud_auxiliary_catalog_detail_lookup_options.title': 'Itens desta tabela',
+  'crud.clear_crud_auxiliary_catalog_detail_lookup_options.singular': 'Item desta tabela',
   'crud.field.name': 'Nome',
   'crud.validation.name_uppercase': 'O nome deve começar com letra maiúscula.',
   'crud.field.notes': 'Observações',
@@ -227,6 +232,14 @@ function translate(code: string): string | undefined {
       </header>
       <DefinitionAccordion title="Definição Go desta grade" subtitle="Abra para ver o modelo de leitura registrado no adapter" :code="definitionSnippets.readModel" />
       <CrudScreen :resource="readModelResource" :client="client" :messages="ptBR" :resolve-message="translate" />
+    </section>
+    <section class="demo-example">
+      <header class="demo-page-heading">
+        <h2><span class="demo-smoke-label">Smoke 11 · lookup no detalhe</span> Rótulo humano sem CRUD independente</h2>
+        <p>O item filho é <code>detail-only</code>: não pode ser listado sozinho. Abra o catálogo <strong>Estados</strong> para ver o lookup resolver o código persistido para o nome da opção dentro do modal.</p>
+      </header>
+      <DefinitionAccordion title="Definição Go desta grade" subtitle="Abra para ver o lookup declarado no filho detail-only" :code="definitionSnippets.auxiliaryDetailLookup" />
+      <CrudScreen :resource="auxiliaryDetailLookupResource" :client="client" :messages="ptBR" :resolve-message="translate" />
     </section>
   </main>
 </template>

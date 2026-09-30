@@ -186,6 +186,11 @@ ordem dos registros. No clear-crud, essas decisões ficam separadas:
   label fica oculto e não entra na mutation. O cliente HTTP preserva o mapa
   nos formatos PascalCase e camelCase antes da resolução. A convenção atende
   TdT sem acoplar o core a catálogo ou tabela.
+- `[x]` Renderizar coleções mestre-detalhe como tabelas compactas, com ações por
+  linha para editar, salvar, cancelar e remover; a inclusão abre somente a
+  nova linha em edição e continua dentro da mutation do pai. Quando
+  `ParentAccess` omite a coleção no registro, o renderer também omite a tabela
+  e suas ações; coleção presente e vazia continua editável.
 - `[ ]` Cabeçalho e rodapé fixos com corpo rolável para formulários longos.
 - `[ ]` Seções opcionais do formulário, sem introduzir HTML na definição.
 - `[-]` Não portar `form_additional_html`.
@@ -322,9 +327,11 @@ ordem dos registros. No clear-crud, essas decisões ficam separadas:
   fornece os valores e o navegador não os escolhe. Isso não substitui filtros
   opcionais de grade nem transforma política do pai em status dos filhos.
 - `[x]` Modo genérico `ResourceAccessDetailOnly` com `DetailParentAccess`: bloqueia
-  as rotas independentes do filho e mantém a edição transacional dentro do pai
-  somente quando o campo server-owned do pai contém um valor permitido. Não há
-  regra de catálogo, filtro local ou endpoint paralelo.
+  list/get/mutations independentes, mas mantém `Definition` e lookups declarados
+  como metadados seguros para o renderer resolver labels no detalhe. A edição
+  transacional dentro do pai só ocorre quando o campo server-owned do pai contém
+  um valor permitido; registros sem esse valor não recebem a coleção no
+  renderer. Não há regra de catálogo, filtro local ou endpoint paralelo.
 - `[ ]` Predicado fixo server-owned para manter uma rota independente do filho e,
   simultaneamente, consultar a política do pai em list/get/create/update/delete;
   abrir somente se um caso genérico real exigir esse fluxo além de `detail-only`.

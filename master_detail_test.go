@@ -207,7 +207,10 @@ func TestDetailOnlyChildCannotBeAccessedIndependently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertCode(t, func() error { _, err := service.Definition(context.Background(), child.Key); return err }(), ErrorForbidden)
+	definition, err := service.Definition(context.Background(), child.Key)
+	if err != nil || len(definition.Actions) != 0 {
+		t.Fatalf("detail-only definition = %#v, %v; metadata is allowed but actions must stay empty", definition, err)
+	}
 	assertCode(t, func() error { _, err := service.List(context.Background(), child.Key, Query{}); return err }(), ErrorForbidden)
 	assertCode(t, func() error { _, err := service.Get(context.Background(), child.Key, "1"); return err }(), ErrorForbidden)
 	assertCode(t, func() error { _, err := service.Create(context.Background(), child.Key, Mutation{}); return err }(), ErrorForbidden)
@@ -216,6 +219,48 @@ func TestDetailOnlyChildCannotBeAccessedIndependently(t *testing.T) {
 		return err
 	}(), ErrorForbidden)
 	assertCode(t, service.Delete(context.Background(), child.Key, "1", 1), ErrorForbidden)
+}
+
+func TestDetailOnlyChildLookupRemainsAvailableForDeclaredFields(t *testing.T) {
+	parent := validDefinition("catalogs")
+	childSource := &recordingSource{
+		capabilities: Capabilities{
+			CapabilityOffsetPage: {}, CapabilityTotalCount: {}, CapabilityAtomicVersion: {},
+			CapabilityUnitOfWork: {}, CapabilityArchive: {}, CapabilityLookup: {},
+		},
+		lookupPage: LookupPage{Options: []LookupOption{{Value: int64(1), Label: "Grupo"}}},
+	}
+	parent.Details = []DetailDefinition{{Key: "items", Resource: "catalog_items", ParentField: "parent_id", Maximum: 2}}
+	child := validDefinition("catalog_items")
+	child.Access = ResourceAccessDetailOnly
+	child.Source = childSource
+	child.UOW = fakeUnitOfWork{}
+	child.Fields = []Field{
+		{Key: "name", Label: "crud.item.name", Type: FieldString, Required: true, Visible: true},
+		{Key: "group_id", Label: "crud.item.group", Type: FieldLookup, Visible: true, Lookup: &LookupDefinition{Resource: child.Key, ValueField: "id", LabelField: "name", PageSize: 25}},
+		{Key: "parent_id", Label: "crud.parent_id", Type: FieldString, Required: true, ReadOnly: true, Visible: false},
+	}
+	child.Grid.Columns = []FieldKey{"name", "group_id"}
+	child.Grid.Searchable = []FieldKey{"name", "group_id"}
+	child.Grid.Sortable = []FieldKey{"name", "group_id"}
+	child.Grid.DefaultSort = []Sort{{Field: "name", Direction: SortAscending}}
+	registry := NewRegistry()
+	for _, definition := range []Definition{parent, child} {
+		if err := registry.Register(context.Background(), definition); err != nil {
+			t.Fatal(err)
+		}
+	}
+	service, err := NewService(Dependencies{Registry: registry, Principal: principalStub{}, Scope: scopeStub{scope: Scope{"tenant_id": "tenant-a"}}, Authorizer: &recordingAuthorizer{}, Audit: auditStub{}, Translator: translatorStub{}, Clock: clockStub{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := service.Lookup(context.Background(), child.Key, "group_id", LookupQuery{})
+	if err != nil || len(page.Options) != 1 || page.Options[0].Label != "Grupo" {
+		t.Fatalf("detail-only lookup = %#v, %v", page, err)
+	}
+	if childSource.lookupCalls != 1 {
+		t.Fatalf("detail-only lookup source calls = %d, want 1", childSource.lookupCalls)
+	}
 }
 
 func TestDetailOnlyRequiresParentAndParentAccessRequiresDetailOnlyChild(t *testing.T) {
