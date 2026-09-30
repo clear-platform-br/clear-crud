@@ -47,6 +47,9 @@ func ValidateDefinition(ctx context.Context, definition Definition) error {
 	if err := validateScope(definition.Scope); err != nil {
 		return err
 	}
+	if err := validateResourceAccess(definition.Access); err != nil {
+		return err
+	}
 	fields, err := validateFields(definition.Fields)
 	if err != nil {
 		return err
@@ -92,6 +95,32 @@ func validateDetails(details []DetailDefinition) error {
 		if detail.Minimum > detail.Maximum {
 			return invalidDefinition(path+".minimum", "must not exceed maximum")
 		}
+		if detail.ParentAccess != nil {
+			if !validKey(string(detail.ParentAccess.Field)) {
+				return invalidDefinition(path+".parent_access.field", "must be a lowercase identifier")
+			}
+			if len(detail.ParentAccess.Values) == 0 || len(detail.ParentAccess.Values) > int(maxPageSize) {
+				return invalidDefinition(path+".parent_access.values", "must contain between 1 and 100 values")
+			}
+			seenValues := make(map[string]struct{}, len(detail.ParentAccess.Values))
+			for valueIndex, value := range detail.ParentAccess.Values {
+				if value == nil || !allowedValue(value) {
+					return invalidDefinition(fmt.Sprintf("%s.parent_access.values[%d]", path, valueIndex), "must be string, bool, or int64")
+				}
+				identity := fmt.Sprintf("%T:%v", value, value)
+				if _, exists := seenValues[identity]; exists {
+					return invalidDefinition(path+".parent_access.values", "must not contain duplicate values")
+				}
+				seenValues[identity] = struct{}{}
+			}
+		}
+	}
+	return nil
+}
+
+func validateResourceAccess(access ResourceAccessMode) error {
+	if access != "" && access != ResourceAccessStandalone && access != ResourceAccessDetailOnly {
+		return invalidDefinition("access", "is unknown")
 	}
 	return nil
 }

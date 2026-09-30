@@ -321,10 +321,13 @@ ordem dos registros. No clear-crud, essas decisões ficam separadas:
   read models por `Definition.Scope.Keys`/`ScopeColumns`; o `ScopeProvider`
   fornece os valores e o navegador não os escolhe. Isso não substitui filtros
   opcionais de grade nem transforma política do pai em status dos filhos.
-- `[ ]` Predicado fixo server-owned para recursos filhos: decidir uma capability
-  genérica aplicada a list/get/create/update/delete ou um modo `detail-only`,
-  capaz de restringir um filho pela política do pai sem filtro local, endpoint
-  paralelo ou regra de domínio no consumidor.
+- `[x]` Modo genérico `ResourceAccessDetailOnly` com `DetailParentAccess`: bloqueia
+  as rotas independentes do filho e mantém a edição transacional dentro do pai
+  somente quando o campo server-owned do pai contém um valor permitido. Não há
+  regra de catálogo, filtro local ou endpoint paralelo.
+- `[ ]` Predicado fixo server-owned para manter uma rota independente do filho e,
+  simultaneamente, consultar a política do pai em list/get/create/update/delete;
+  abrir somente se um caso genérico real exigir esse fluxo além de `detail-only`.
 - `[x]` Permissões revalidadas no backend.
 - `[x]` Archive e hard delete com política explícita.
 - `[x]` Visibilidade declarada de archive no Grid: manter `active_only` por

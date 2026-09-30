@@ -46,6 +46,16 @@ const (
 	ScopeModeGlobal ScopeMode = "global"
 )
 
+// ResourceAccessMode controls whether a registered resource has independent
+// CRUD routes or can only be reached through a declared master-detail parent.
+// The empty value preserves the standalone default for existing definitions.
+type ResourceAccessMode string
+
+const (
+	ResourceAccessStandalone ResourceAccessMode = "standalone"
+	ResourceAccessDetailOnly ResourceAccessMode = "detail_only"
+)
+
 // Option is a fixed enum option.
 type Option struct {
 	Value Value
@@ -276,6 +286,14 @@ type DetailFieldMetadataSource struct {
 	RequiredField FieldKey `json:",omitempty"`
 }
 
+// DetailParentAccess limits a child collection to parent records whose field
+// contains one of the declared server-owned values. It is evaluated by the
+// core for detail reads and mutations; clients never provide the condition.
+type DetailParentAccess struct {
+	Field  FieldKey
+	Values []Value
+}
+
 // DetailDefinition declares one server-registered child collection. ParentField
 // is internal: the service supplies the parent record ID and rejects client input.
 type DetailDefinition struct {
@@ -288,6 +306,7 @@ type DetailDefinition struct {
 	AllowUpdate   bool
 	AllowDelete   bool
 	FieldMetadata []DetailFieldMetadataSource
+	ParentAccess  *DetailParentAccess
 }
 
 // FieldErrors maps a field to a safe, localizable validation message.
@@ -319,6 +338,7 @@ type Definition struct {
 	Labels        Labels
 	Scope         ScopeRequirements
 	Permissions   Permissions
+	Access        ResourceAccessMode
 	Fields        []Field
 	Details       []DetailDefinition
 	Grid          GridDefinition

@@ -14,11 +14,12 @@ func TestValidateDefinitionCoversStartupBoundaries(t *testing.T) {
 		change   func(*Definition)
 		wantPath string
 	}{
-		"missing title":     {func(definition *Definition) { definition.Labels.Title = "" }, "labels.title"},
-		"missing singular":  {func(definition *Definition) { definition.Labels.Singular = "" }, "labels.singular"},
-		"missing source":    {func(definition *Definition) { definition.Source = nil }, "source"},
-		"typed nil source":  {func(definition *Definition) { var source *nilSource; definition.Source = source }, "source"},
-		"invalid scope key": {func(definition *Definition) { definition.Scope.Keys = []string{"tenant-id"} }, "scope.keys[0]"},
+		"missing title":           {func(definition *Definition) { definition.Labels.Title = "" }, "labels.title"},
+		"missing singular":        {func(definition *Definition) { definition.Labels.Singular = "" }, "labels.singular"},
+		"missing source":          {func(definition *Definition) { definition.Source = nil }, "source"},
+		"typed nil source":        {func(definition *Definition) { var source *nilSource; definition.Source = source }, "source"},
+		"unknown resource access": {func(definition *Definition) { definition.Access = ResourceAccessMode("nested") }, "access"},
+		"invalid scope key":       {func(definition *Definition) { definition.Scope.Keys = []string{"tenant-id"} }, "scope.keys[0]"},
 		"too long resource key": {func(definition *Definition) {
 			definition.Key = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklm"
 		}, "key"},

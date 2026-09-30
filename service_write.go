@@ -38,7 +38,7 @@ func (service *Service) Create(ctx context.Context, key ResourceKey, mutation Mu
 		if err != nil {
 			return err
 		}
-		details, err := service.loadDetails(transaction, state, record.ID)
+		details, err := service.loadDetails(transaction, state, record.ID, parentFields)
 		if err != nil {
 			return err
 		}
@@ -102,7 +102,7 @@ func (service *Service) Update(ctx context.Context, key ResourceKey, id RecordID
 		if err != nil {
 			return err
 		}
-		details, err := service.loadDetails(transaction, state, id)
+		details, err := service.loadDetails(transaction, state, id, parentFields)
 		if err != nil {
 			return err
 		}
@@ -178,6 +178,9 @@ func (service *Service) resolveAction(ctx context.Context, key ResourceKey, acti
 	definition, ok := service.registry.Get(key)
 	if !ok {
 		return readState{}, publicError(ErrorNotFound, "crud.error.not_found", nil)
+	}
+	if definition.Access == ResourceAccessDetailOnly {
+		return readState{}, publicError(ErrorForbidden, "crud.error.forbidden", nil)
 	}
 	if !actionEnabled(definition.Permissions, action) {
 		return readState{}, publicError(ErrorForbidden, "crud.error.forbidden", nil)

@@ -190,6 +190,136 @@ func TestMasterDetailDefinitionExposesOnlyAuthorizedVisibleChildMetadata(t *test
 	}
 }
 
+func TestDetailOnlyChildCannotBeAccessedIndependently(t *testing.T) {
+	registry := NewRegistry()
+	parent := validDefinition("catalogs")
+	parent.Details = []DetailDefinition{{Key: "items", Resource: "catalog_items", ParentField: "parent_id", Maximum: 2, AllowCreate: true, AllowUpdate: true, AllowDelete: true}}
+	child := validDefinition("catalog_items")
+	child.Access = ResourceAccessDetailOnly
+	child.Fields = append(child.Fields, Field{Key: "parent_id", Label: "crud.parent_id", Type: FieldString, ReadOnly: true, Visible: false})
+	if err := registry.Register(context.Background(), parent); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Register(context.Background(), child); err != nil {
+		t.Fatal(err)
+	}
+	service, err := NewService(Dependencies{Registry: registry, Principal: principalStub{}, Scope: scopeStub{scope: Scope{"tenant_id": "tenant-a"}}, Authorizer: &detailAuthorizer{}, Audit: auditStub{}, Translator: translatorStub{}, Clock: fixedClock{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCode(t, func() error { _, err := service.Definition(context.Background(), child.Key); return err }(), ErrorForbidden)
+	assertCode(t, func() error { _, err := service.List(context.Background(), child.Key, Query{}); return err }(), ErrorForbidden)
+	assertCode(t, func() error { _, err := service.Get(context.Background(), child.Key, "1"); return err }(), ErrorForbidden)
+	assertCode(t, func() error { _, err := service.Create(context.Background(), child.Key, Mutation{}); return err }(), ErrorForbidden)
+	assertCode(t, func() error {
+		_, err := service.Update(context.Background(), child.Key, "1", 1, Mutation{})
+		return err
+	}(), ErrorForbidden)
+	assertCode(t, service.Delete(context.Background(), child.Key, "1", 1), ErrorForbidden)
+}
+
+func TestDetailOnlyRequiresParentAndParentAccessRequiresDetailOnlyChild(t *testing.T) {
+	child := validDefinition("catalog_items")
+	child.Access = ResourceAccessDetailOnly
+	registry := NewRegistry()
+	if err := registry.Register(context.Background(), child); err != nil {
+		t.Fatal(err)
+	}
+	_, err := NewService(Dependencies{Registry: registry, Principal: principalStub{}, Scope: scopeStub{scope: Scope{"tenant_id": "tenant-a"}}, Authorizer: &detailAuthorizer{}, Audit: auditStub{}, Translator: translatorStub{}, Clock: fixedClock{}})
+	var definitionError *DefinitionError
+	if !errors.As(err, &definitionError) || definitionError.Path != "access" {
+		t.Fatalf("orphan detail-only child error = %v, want access", err)
+	}
+
+	registry = NewRegistry()
+	parent := validDefinition("catalogs")
+	parent.Details = []DetailDefinition{{
+		Key: "items", Resource: child.Key, ParentField: "parent_id", Maximum: 2,
+		ParentAccess: &DetailParentAccess{Field: "active", Values: []Value{true}},
+	}}
+	child.Access = ResourceAccessStandalone
+	child.Fields = append(child.Fields, Field{Key: "parent_id", Label: "crud.parent_id", Type: FieldString, ReadOnly: true, Visible: false})
+	if err := registry.Register(context.Background(), parent); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Register(context.Background(), child); err != nil {
+		t.Fatal(err)
+	}
+	_, err = NewService(Dependencies{Registry: registry, Principal: principalStub{}, Scope: scopeStub{scope: Scope{"tenant_id": "tenant-a"}}, Authorizer: &detailAuthorizer{}, Audit: auditStub{}, Translator: translatorStub{}, Clock: fixedClock{}})
+	if !errors.As(err, &definitionError) || definitionError.Path != "details[0].parent_access" {
+		t.Fatalf("standalone child with parent access error = %v, want details[0].parent_access", err)
+	}
+}
+
+func TestDetailParentAccessLimitsChildReadsAndMutations(t *testing.T) {
+	parentSource := &detailSource{
+		current: Record{ID: "catalog-1", Version: 1, Fields: Fields{"name": "Sistema", "management": "system"}},
+		updated: Record{ID: "catalog-1", Version: 2, Fields: Fields{"name": "Sistema", "management": "system"}},
+	}
+	childSource := &detailSource{list: Page{
+		Records: []Record{{ID: "item-1", Version: 1, Fields: Fields{"parent_id": "catalog-1", "name": "Interno"}}},
+		Total:   total(1),
+	}}
+	registry := NewRegistry()
+	parent := validDefinition("catalogs")
+	parent.Source = parentSource
+	parent.UOW = fakeUnitOfWork{}
+	parent.Fields = append(parent.Fields, Field{Key: "management", Label: "crud.management", Type: FieldEnum, Visible: false, Enum: []Option{{Value: "system", Label: "crud.management.system"}, {Value: "customizable", Label: "crud.management.customizable"}}})
+	parent.Details = []DetailDefinition{{
+		Key: "items", Resource: "catalog_items", ParentField: "parent_id", Maximum: 2,
+		AllowCreate: true, AllowUpdate: true, AllowDelete: true,
+		ParentAccess: &DetailParentAccess{Field: "management", Values: []Value{"customizable"}},
+	}}
+	child := validDefinition("catalog_items")
+	child.Source = childSource
+	child.UOW = fakeUnitOfWork{}
+	child.Access = ResourceAccessDetailOnly
+	child.Fields = []Field{
+		{Key: "name", Label: "crud.item.name", Type: FieldString, Required: true, Visible: true},
+		{Key: "parent_id", Label: "crud.parent_id", Type: FieldString, Required: true, ReadOnly: true, Visible: false},
+	}
+	child.Grid.Columns = []FieldKey{"name"}
+	child.Grid.Searchable = []FieldKey{"name"}
+	child.Grid.Sortable = []FieldKey{"name"}
+	child.Grid.DefaultSort = []Sort{{Field: "name", Direction: SortAscending}}
+	if err := registry.Register(context.Background(), parent); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Register(context.Background(), child); err != nil {
+		t.Fatal(err)
+	}
+	authorizer := &detailAuthorizer{}
+	service, err := NewService(Dependencies{Registry: registry, Principal: principalStub{}, Scope: scopeStub{scope: Scope{"tenant_id": "tenant-a"}}, Authorizer: authorizer, Audit: &mutationAudit{}, Translator: translatorStub{}, Clock: fixedClock{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := service.Get(context.Background(), parent.Key, "catalog-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Details) != 0 || childSource.listQuery.Filters != nil {
+		t.Fatalf("disallowed parent exposed child data: details=%#v query=%#v", got.Details, childSource.listQuery)
+	}
+	_, err = service.Update(context.Background(), parent.Key, "catalog-1", 1, Mutation{Fields: Fields{"name": "Sistema", "active": true}, Details: DetailMutations{"items": {{Fields: Fields{"name": "blocked"}}}}})
+	assertCode(t, err, ErrorForbidden)
+	if childSource.createCalls != 0 || childSource.updateCalls != 0 {
+		t.Fatal("disallowed parent mutation reached the child source")
+	}
+
+	parentSource.current.Fields["management"] = "customizable"
+	got, err = service.Get(context.Background(), parent.Key, "catalog-1")
+	if err != nil || len(got.Details["items"]) != 1 {
+		t.Fatalf("allowed parent did not expose children: details=%#v err=%v", got.Details, err)
+	}
+	_, err = service.Update(context.Background(), parent.Key, "catalog-1", 1, Mutation{Fields: Fields{"name": "Sistema", "active": true}, Details: DetailMutations{"items": {{Fields: Fields{"name": "allowed"}}}}})
+	if err != nil {
+		t.Fatalf("allowed parent mutation failed: %v", err)
+	}
+	if childSource.createCalls != 1 || childSource.createMutations[0].Fields["parent_id"] != "catalog-1" {
+		t.Fatalf("allowed child mutation was not bound to parent: %#v", childSource.createMutations)
+	}
+}
+
 func TestDetailDefinitionValidationRejectsInvalidBoundsAndKeys(t *testing.T) {
 	for _, detail := range []DetailDefinition{
 		{Key: "Bad", Resource: "child", ParentField: "parent_id", Maximum: 1},

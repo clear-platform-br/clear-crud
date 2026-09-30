@@ -140,6 +140,11 @@ func cloneDefinition(definition Definition) Definition {
 	for index, detail := range definition.Details {
 		clone.Details[index] = detail
 		clone.Details[index].FieldMetadata = append([]DetailFieldMetadataSource(nil), detail.FieldMetadata...)
+		if detail.ParentAccess != nil {
+			parentAccess := *detail.ParentAccess
+			parentAccess.Values = append([]Value(nil), detail.ParentAccess.Values...)
+			clone.Details[index].ParentAccess = &parentAccess
+		}
 	}
 	clone.Grid.Columns = append([]FieldKey(nil), definition.Grid.Columns...)
 	clone.Grid.Searchable = append([]FieldKey(nil), definition.Grid.Searchable...)

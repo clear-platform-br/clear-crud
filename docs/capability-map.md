@@ -17,7 +17,7 @@ ou renderer, e `-` significa que ainda não deve ser usado.
 | Form | `Form.Fields`, um campo por linha, defaults estáticos visíveis na inclusão, validação local e server-side, enum, booleano, lookup e resolução de metadados de campos filhos fixos por valores do pai. |
 | Mutação | Create/update/delete versionados, `UnitOfWork`, auditoria obrigatória e hooks tipados. |
 | Exclusão | Nenhuma ação por default; archive e hard delete somente por declaração explícita. |
-| Mestre-detalhe | Uma coleção filha direta, com cardinalidade, mutation transacional e `DetailFieldMetadataSource` para label/tipo/requiredness server-owned de slots já declarados; slot mapeado sem label fica oculto; sem árvore ou netos. |
+| Mestre-detalhe | Uma coleção filha direta, com cardinalidade, mutation transacional e `DetailFieldMetadataSource` para label/tipo/requiredness server-owned de slots já declarados; `ResourceAccessDetailOnly` bloqueia as rotas independentes do filho e `DetailParentAccess` permite a edição dentro do pai apenas para valores server-owned declarados; slot mapeado sem label fica oculto; sem árvore ou netos. |
 | Lookup | Valor separado de label, dependências dinâmicas, filtros fixos server-owned por lista tipada (igualdade ou pertencimento), busca, primeira página limitada, cache bounded (512 entradas/5 min por default) e resolução do label na grade. |
 | Catálogo global | `RegisterAutoGlobalTable` para referência compartilhada, read-only e sem duplicação por tenant. |
 | Metadados | `MetadataSource` promove `CHECK`/enum finito para opções estruturais e pode marcar campos de modelos de leitura como somente leitura durante o bootstrap. |
