@@ -92,6 +92,9 @@ sem alterar a definição do consumidor.
 
 - equivalência de modelos de leitura registrados nos adapters PostgreSQL,
   MySQL/MariaDB e demais adapters;
+- predicado fixo server-owned para propagar política de um recurso pai a todas
+  as leituras e mutações de uma rota filha independente; até existir capability
+  genérica, não simular isso no consumidor;
 - relatórios agregados com agrupamento, medidas, subtotais e total geral;
 - validadores declarativos de regex e transformações tipadas;
 - exportação CSV, seleção em massa e edição inline;

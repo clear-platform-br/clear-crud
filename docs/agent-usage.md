@@ -59,6 +59,14 @@ enum do motor: `system` identifica catálogo técnico fornecido pelo produto,
 para produtos que permitem ao usuário criar catálogos. O clear-crud apenas
 executa o escopo, autorização e definição declarados pelo consumidor.
 
+Esse escopo adicional não deriva uma política do pai para uma rota independente
+do filho: a coluna/alias precisa existir na fonte do próprio recurso. Hoje não
+há um predicado fixo server-owned publicado que seja aplicado automaticamente
+a `List`, `Get`, `Create`, `Update` e `Delete` de um filho a partir de um campo
+do pai. Se essa garantia for necessária, pare no consumidor e abra uma evolução
+genérica (ou um modo detail-only); não faça filtro local, endpoint paralelo ou
+regra de TdT no produto.
+
 ## Tradução e Weblate
 
 Use `MessageCode` estável nas definições e nos componentes publicados. O texto
