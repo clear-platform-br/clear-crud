@@ -60,12 +60,34 @@ para produtos que permitem ao usuário criar catálogos. O clear-crud apenas
 executa o escopo, autorização e definição declarados pelo consumidor.
 
 Esse escopo adicional não deriva uma política do pai para uma rota independente
-do filho: a coluna/alias precisa existir na fonte do próprio recurso. Hoje não
-há um predicado fixo server-owned publicado que seja aplicado automaticamente
-a `List`, `Get`, `Create`, `Update` e `Delete` de um filho a partir de um campo
-do pai. Se essa garantia for necessária, pare no consumidor e abra uma evolução
-genérica (ou um modo detail-only); não faça filtro local, endpoint paralelo ou
-regra de TdT no produto.
+do filho: a coluna/alias precisa existir na fonte do próprio recurso. Quando o
+filho só deve ser alcançado pelo pai, use o modo genérico `detail-only`:
+
+```go
+child.Access = crud.ResourceAccessDetailOnly
+parent.Details = []crud.DetailDefinition{{
+    Key: "items", Resource: "items", ParentField: "parent_id",
+    AllowCreate: true, AllowUpdate: true, AllowDelete: true,
+    ParentAccess: &crud.DetailParentAccess{
+        Field: "maintenance_policy",
+        Values: []crud.Value{"customizable", "user"},
+    },
+}}
+```
+
+O core bloqueia `Definition`, `List`, `Get`, `Lookup`, `Create`, `Update` e
+`Delete` diretos do filho com `crud.error.forbidden`. Dentro do pai, a coleção
+continua plenamente editável quando o campo server-owned do pai tem um dos
+valores declarados. Quando não tem, os filhos não são carregados e qualquer
+mutation filha explícita é recusada. A condição nunca vem do navegador, não
+cria filtro local, endpoint paralelo ou regra de TdT. O modo `detail-only` deve
+ser usado somente por um `DetailDefinition` declarado; um filho não pode ficar
+órfão no registry.
+
+Ainda não existe um predicado genérico para manter uma rota independente do
+filho e, ao mesmo tempo, consultar automaticamente uma política do pai. Se
+esse fluxo for necessário, abra uma evolução genérica separada; não faça a
+regra no consumidor.
 
 ## Tradução e Weblate
 

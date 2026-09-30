@@ -105,6 +105,9 @@ func (service *Service) resolveRead(ctx context.Context, key ResourceKey) (readS
 	if !ok {
 		return readState{}, publicError(ErrorNotFound, "crud.error.not_found", nil)
 	}
+	if definition.Access == ResourceAccessDetailOnly {
+		return readState{}, publicError(ErrorForbidden, "crud.error.forbidden", nil)
+	}
 	principal, err := service.principal.Principal(ctx)
 	if err != nil {
 		return readState{}, publicError(ErrorUnauthenticated, "crud.error.unauthenticated", err)

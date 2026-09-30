@@ -25,6 +25,7 @@ type detailEvent struct {
 // validateMasterDetailDefinitions validates relationships after every resource
 // has been registered. A child can be reused only as a single-level detail.
 func validateMasterDetailDefinitions(registry *Registry) error {
+	detailOnlyResources := make(map[ResourceKey]struct{})
 	for _, parentKey := range registry.Keys() {
 		parent, _ := registry.Get(parentKey)
 		seenResources := make(map[ResourceKey]struct{}, len(parent.Details))
@@ -37,6 +38,7 @@ func validateMasterDetailDefinitions(registry *Registry) error {
 				return invalidDefinition(path+".resource", "must not be declared more than once")
 			}
 			seenResources[detail.Resource] = struct{}{}
+			detailOnlyResources[detail.Resource] = struct{}{}
 			child, ok := registry.Get(detail.Resource)
 			if !ok {
 				return invalidDefinition(path+".resource", "must reference a registered resource")
@@ -62,6 +64,22 @@ func validateMasterDetailDefinitions(registry *Registry) error {
 			}
 			if err := validateDetailFieldMetadata(parent, index, detail, child); err != nil {
 				return err
+			}
+			if detail.ParentAccess != nil {
+				if child.Access != ResourceAccessDetailOnly {
+					return invalidDefinition(path+".parent_access", "requires a detail-only child resource")
+				}
+				if _, ok := findField(parent.Fields, detail.ParentAccess.Field); !ok {
+					return invalidDefinition(path+".parent_access.field", "must reference a declared parent field")
+				}
+			}
+		}
+	}
+	for _, key := range registry.Keys() {
+		definition, _ := registry.Get(key)
+		if definition.Access == ResourceAccessDetailOnly {
+			if _, ok := detailOnlyResources[key]; !ok {
+				return invalidDefinition("access", "detail-only resource must be declared by a parent")
 			}
 		}
 	}
@@ -122,6 +140,9 @@ func (service *Service) normalizeDetailChanges(ctx context.Context, state readSt
 		detail, ok := definitions[key]
 		if !ok || len(mutations) > int(detail.Maximum) {
 			return nil, invalidMutation(nil)
+		}
+		if !detailParentAccessAllowed(detail, parentFields) {
+			return nil, publicError(ErrorForbidden, "crud.error.forbidden", nil)
 		}
 		child, ok := service.registry.Get(detail.Resource)
 		if !ok {
@@ -266,12 +287,15 @@ func detailError(detail DetailDefinition, err error) error {
 	return &Error{Code: public.Code, Message: public.Message, Fields: fields, Cause: public.Cause}
 }
 
-func (service *Service) loadDetails(ctx context.Context, state readState, parentID RecordID) (DetailRecords, error) {
+func (service *Service) loadDetails(ctx context.Context, state readState, parentID RecordID, parentFields Fields) (DetailRecords, error) {
 	if len(state.definition.Details) == 0 {
 		return nil, nil
 	}
 	details := make(DetailRecords, len(state.definition.Details))
 	for _, detail := range state.definition.Details {
+		if !detailParentAccessAllowed(detail, parentFields) {
+			continue
+		}
 		child, ok := service.registry.Get(detail.Resource)
 		if !ok {
 			return nil, unavailable(nil)
@@ -300,4 +324,20 @@ func (service *Service) loadDetails(ctx context.Context, state readState, parent
 		details[detail.Key] = records
 	}
 	return details, nil
+}
+
+func detailParentAccessAllowed(detail DetailDefinition, parentFields Fields) bool {
+	if detail.ParentAccess == nil {
+		return true
+	}
+	value, ok := parentFields[detail.ParentAccess.Field]
+	if !ok {
+		return false
+	}
+	for _, allowed := range detail.ParentAccess.Values {
+		if fmt.Sprintf("%T:%v", value, value) == fmt.Sprintf("%T:%v", allowed, allowed) {
+			return true
+		}
+	}
+	return false
 }

@@ -41,7 +41,7 @@ func (service *Service) Get(ctx context.Context, key ResourceKey, id RecordID) (
 	if err := service.authorizer.Authorize(ctx, state.principal, key, ActionRead, &record); err != nil {
 		return Record{}, publicError(ErrorForbidden, "crud.error.forbidden", err)
 	}
-	details, err := service.loadDetails(ctx, state, id)
+	details, err := service.loadDetails(ctx, state, id, record.Fields)
 	if err != nil {
 		return Record{}, err
 	}
