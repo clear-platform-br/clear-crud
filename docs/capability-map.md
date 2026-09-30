@@ -10,7 +10,7 @@ ou renderer, e `-` significa que ainda não deve ser usado.
 | Grupo | Situação atual |
 | --- | --- |
 | Registro | Definições server-owned, validação no bootstrap, cópia defensiva e registry lacrado. |
-| Escopo | Recursos tenant-scoped ou global explícitos; o navegador nunca escolhe tenant. |
+| Escopo | Recursos tenant-scoped ou global explícitos; chaves adicionais server-owned podem particionar uma visão via `Definition.Scope.Keys`/`ScopeColumns`; o navegador nunca escolhe tenant nem escopo confiável. |
 | Autorização | Permissão por ação e revalidação backend antes de leitura e mutação. |
 | Campos | Tipos escalares, required por default, `Optional`, defaults estáticos de criação inclusive em campos técnicos invisíveis, limites de tamanho/faixa, sensibilidade, somente leitura, `create_only`, padrões RE2 declarativos com mensagens localizáveis e presets públicos `crud.Pattern*` para formatos recorrentes. |
 | Grid | Projeção/ordem por `Grid.Columns`, busca textual global server-side e filtros automáticos por coluna via `Query.Filters`, ordenação determinística, paginação offset no HTTP atual e limite máximo de 100; no `AutoTable`, a ordem física do banco é preservada quando não há projeção explícita. Archive permanece `active_only` por default; `Grid.ArchiveVisibility` pode habilitar o toggle compacto `Excluídos`, com linhas arquivadas somente para leitura, selo `Excluído` na coluna de ações e faixa visual dedicada. |
@@ -70,6 +70,13 @@ declarada no bootstrap, como `Values: []crud.Value{"estado"}`. Um valor aplica
 igualdade e vários aplicam pertencimento. Eles se somam a dependências, escopo
 confiável e archive; não são parâmetros HTTP nem substituem autorização.
 
+Uma política de manutenção de catálogo é metadado do recurso pai, não status
+de cada opção filha. O consumidor pode usar um escopo confiável adicional para
+uma visão operacional que sempre deva ser particionada, mas isso exige valor do
+`ScopeProvider`; não é um filtro livre do navegador. Os nomes e valores da
+política (`system`, `customizable`, `user`, por exemplo) continuam pertencendo
+ao produto consumidor.
+
 ### Modelos de leitura registrados
 
 O contrato já aceita campos server-owned `ReadOnly` retornados pelo `DataSource`,
@@ -85,6 +92,9 @@ sem alterar a definição do consumidor.
 
 - equivalência de modelos de leitura registrados nos adapters PostgreSQL,
   MySQL/MariaDB e demais adapters;
+- predicado fixo server-owned para propagar política de um recurso pai a todas
+  as leituras e mutações de uma rota filha independente; até existir capability
+  genérica, não simular isso no consumidor;
 - relatórios agregados com agrupamento, medidas, subtotais e total geral;
 - validadores declarativos de regex e transformações tipadas;
 - exportação CSV, seleção em massa e edição inline;

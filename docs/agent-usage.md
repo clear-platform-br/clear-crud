@@ -37,6 +37,36 @@ alteração de catálogo.
 Se um tenant precisar restringir opções, mantenha o catálogo global e crie uma
 associação tenant-owned — não replique o catálogo inteiro.
 
+### Escopo confiável e política de manutenção
+
+`tenant_id` é a fronteira padrão dos dados pertencentes ao tenant. Quando uma
+visão server-owned precisa de outra partição obrigatória, o consumidor pode
+declarar a chave adicional em `Definition.Scope.Keys` e mapeá-la no adapter por
+`ScopeColumns`. O `ScopeProvider` fornece o valor confiável em cada operação;
+o navegador nunca escolhe nem substitui essa chave. Isso é escopo de segurança,
+não um filtro visual opcional.
+
+Se a necessidade for somente filtrar a grade sob escolha do operador, use os
+filtros de coluna publicados ou uma definição/recurso de leitura separado. Não
+transforme um toggle do cliente em escopo e não use `LookupDefinition.FixedFilters`
+para a grade: filtros fixos pertencem a lookups.
+
+Em uma relação pai-filhos, a política de manutenção pertence ao registro pai;
+ela não deve ser repetida nem reinterpretada em cada opção filha. Os valores
+`system`, `customizable` e `user` são uma convenção possível do produto, não um
+enum do motor: `system` identifica catálogo técnico fornecido pelo produto,
+`customizable` permite manutenção operacional dos itens e `user` fica reservado
+para produtos que permitem ao usuário criar catálogos. O clear-crud apenas
+executa o escopo, autorização e definição declarados pelo consumidor.
+
+Esse escopo adicional não deriva uma política do pai para uma rota independente
+do filho: a coluna/alias precisa existir na fonte do próprio recurso. Hoje não
+há um predicado fixo server-owned publicado que seja aplicado automaticamente
+a `List`, `Get`, `Create`, `Update` e `Delete` de um filho a partir de um campo
+do pai. Se essa garantia for necessária, pare no consumidor e abra uma evolução
+genérica (ou um modo detail-only); não faça filtro local, endpoint paralelo ou
+regra de TdT no produto.
+
 ## Tradução e Weblate
 
 Use `MessageCode` estável nas definições e nos componentes publicados. O texto
