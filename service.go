@@ -84,7 +84,7 @@ func NewService(dependencies Dependencies) (*Service, error) {
 // Definition returns a renderer-safe definition for a principal that can read
 // the resource.
 func (service *Service) Definition(ctx context.Context, key ResourceKey) (PublicDefinition, error) {
-	state, err := service.resolveRead(ctx, key)
+	state, err := service.resolveAuthorized(ctx, key)
 	if err != nil {
 		return PublicDefinition{}, err
 	}
@@ -98,15 +98,27 @@ type readState struct {
 }
 
 func (service *Service) resolveRead(ctx context.Context, key ResourceKey) (readState, error) {
+	state, err := service.resolveAuthorized(ctx, key)
+	if err != nil {
+		return readState{}, err
+	}
+	if state.definition.Access == ResourceAccessDetailOnly {
+		return readState{}, publicError(ErrorForbidden, "crud.error.forbidden", nil)
+	}
+	return state, nil
+}
+
+// resolveAuthorized loads a resource after principal, trusted scope, and read
+// authorization checks. Detail-only resources may use this state for safe
+// metadata and declared lookup resolution, but never for independent record
+// reads or mutations.
+func (service *Service) resolveAuthorized(ctx context.Context, key ResourceKey) (readState, error) {
 	if service == nil {
 		return readState{}, unavailable(nil)
 	}
 	definition, ok := service.registry.Get(key)
 	if !ok {
 		return readState{}, publicError(ErrorNotFound, "crud.error.not_found", nil)
-	}
-	if definition.Access == ResourceAccessDetailOnly {
-		return readState{}, publicError(ErrorForbidden, "crud.error.forbidden", nil)
 	}
 	principal, err := service.principal.Principal(ctx)
 	if err != nil {
@@ -171,10 +183,12 @@ func publicDefinition(ctx context.Context, state readState, authorizer Authorize
 			definition.Fields = append(definition.Fields, publicField(field))
 		}
 	}
-	for _, action := range []Action{ActionCreate, ActionUpdate, ActionDelete, ActionHelp} {
-		if actionEnabled(state.definition.Permissions, action) &&
-			authorizer.Authorize(ctx, state.principal, state.definition.Key, action, nil) == nil {
-			definition.Actions = append(definition.Actions, action)
+	if state.definition.Access != ResourceAccessDetailOnly {
+		for _, action := range []Action{ActionCreate, ActionUpdate, ActionDelete, ActionHelp} {
+			if actionEnabled(state.definition.Permissions, action) &&
+				authorizer.Authorize(ctx, state.principal, state.definition.Key, action, nil) == nil {
+				definition.Actions = append(definition.Actions, action)
+			}
 		}
 	}
 	for _, detail := range state.definition.Details {

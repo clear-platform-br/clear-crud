@@ -219,6 +219,22 @@ func (source *SimpleTable) Update(ctx context.Context, scope crud.Scope, id crud
 	if source.table.Global {
 		return crud.Record{}, public(crud.ErrorInvalidRequest)
 	}
+	// Updates from the generic contract may omit server-owned or hidden
+	// columns. Preserve their persisted values before building the adapter's
+	// full-column SQL statement; nil must remain an intentional value for a
+	// field that the mutation explicitly supplied.
+	current, err := source.Get(ctx, scope, id)
+	if err != nil {
+		return crud.Record{}, err
+	}
+	fields := make(crud.Fields, len(current.Fields)+len(mutation.Fields))
+	for key, value := range current.Fields {
+		fields[key] = value
+	}
+	for key, value := range mutation.Fields {
+		fields[key] = value
+	}
+	mutation.Fields = fields
 	_, _, allArgs, err := source.mutationValues(scope, mutation, crud.ActionUpdate)
 	if err != nil {
 		return crud.Record{}, err

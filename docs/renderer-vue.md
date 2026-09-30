@@ -64,11 +64,22 @@ autoridade e também os rejeita se forem enviados diretamente.
 ## Mestre-detalhe
 
 Quando a definição pública expõe `Details`, o editor apresenta as coleções
-filhas diretas. O usuário inclui, edita ou remove itens e o client envia uma
-única mutation. O campo interno de vínculo não é renderizado, nem aceito do
-navegador. Árvore, filho de filho, muitos-para-muitos, workflow e efeitos
-externos continuam fora do renderer. A release experimental atual ainda não
-oferece anexos; quando a capability genérica for publicada, upload,
+filhas diretas como tabelas dentro do modal do pai. Cada linha expõe as mesmas
+ações compactas do grid: editar transforma somente aquela linha em controles,
+salvar confirma os valores no draft, cancelar descarta a edição da linha e
+remover marca o item para a mutation. O botão de inclusão abre a nova linha em
+edição focada; o client ainda envia uma única mutation transacional ao salvar o
+pai. O campo interno de vínculo não é renderizado, nem aceito do navegador. Se
+o registro pai não atende uma condição server-owned de `ParentAccess`, o
+servidor omite a coleção em `Record.Details`; o renderer não mostra tabela nem
+ação de inclusão para aquele registro. Uma coleção presente e vazia, por outro
+lado, é uma coleção permitida sem itens.
+`ResourceAccessDetailOnly`, por si só, não limita a coleção a uma parte das
+linhas do pai: sem `ParentAccess`, cada pai recebe e edita seus próprios itens
+na mesma grade pai. `ParentAccess` é uma política opcional, não uma exigência
+de mestre-detalhe nem da TdT.
+Árvore, filho de filho, muitos-para-muitos, workflow e efeitos externos
+continuam fora do renderer. A release experimental atual ainda não oferece anexos; quando a capability genérica for publicada, upload,
 substituição, remoção e miniaturas serão habilitados somente por definição
 explícita do recurso e por um repositório de armazenamento registrado no
 servidor.

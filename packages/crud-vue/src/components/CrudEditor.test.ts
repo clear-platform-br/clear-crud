@@ -26,12 +26,17 @@ describe('CrudEditor', () => {
     expect(creating.get('.crud-editor-title').text()).toBe('Contatos')
   })
 
-  it('renders a declared child collection and emits its add action', async () => {
+	it('renders a declared child collection and emits its add action', async () => {
     const wrapper = mount(CrudEditor, { props: { definition, editor, messages: ptBR, translate: createTranslator(ptBR, (key) => ({ 'destinations.title': 'Destinos' }[key])), submitting: false, lookup: async () => [] } })
     expect(wrapper.get('[data-clear-crud-detail="destinations"]').text()).toContain('Destinos')
     await wrapper.get('[data-clear-crud-detail="destinations"] .crud-action').trigger('click')
-    expect(wrapper.emitted('addDetail')).toEqual([['destinations']])
-  })
+		expect(wrapper.emitted('addDetail')).toEqual([['destinations']])
+	})
+
+	it('does not render a detail collection omitted by the record', () => {
+		const wrapper = mount(CrudEditor, { props: { definition, editor: { id: 'catalog-30', version: 1, fields: { name: 'Canais' }, details: {} }, messages: ptBR, translate: createTranslator(ptBR), submitting: false, lookup: async () => [] } })
+		expect(wrapper.find('[data-clear-crud-detail="destinations"]').exists()).toBe(false)
+	})
 
   it('renders a resolved literal label for a fixed child slot', () => {
     const metadataDefinition: PublicDefinition = {
@@ -50,13 +55,14 @@ describe('CrudEditor', () => {
       editor: { fields: { name: 'Categorias financeiras', value_label: 'Nome da categoria', value_2_label: '' }, details: { destinations: [{ fields: { value_1: 'Energia' } }] } },
       messages: ptBR, translate: createTranslator(ptBR), submitting: false, lookup: async () => [],
     } })
-    expect(wrapper.get('[data-clear-crud-detail="destinations"] .crud-field-label').text()).toContain('Nome da categoria')
-    expect(wrapper.findAll('[data-clear-crud-detail="destinations"] .crud-field')).toHaveLength(1)
+    expect(wrapper.get('[data-clear-crud-detail="destinations"] .crud-detail-table th').text()).toContain('Nome da categoria')
+    expect(wrapper.findAll('[data-clear-crud-detail="destinations"] tbody tr > td[data-clear-crud-field]').map((cell) => cell.attributes('data-clear-crud-field'))).toEqual(['value_1'])
   })
 
   it('shows a qualified server error beside the child field', async () => {
     const draft: EditorDraft = { fields: { name: 'Ana' }, details: { destinations: [{ fields: { address: 'bad' } }] } }
     const wrapper = mount(CrudEditor, { props: { definition, editor: draft, feedback: { kind: 'error', message: 'crud.ui.validation', fields: { 'destinations.address': 'crud.field.invalid' } }, messages: ptBR, translate: createTranslator(ptBR), submitting: false, lookup: async () => [] } })
+    await wrapper.get('[data-clear-crud-detail="destinations"] [data-clear-crud-action="edit-detail"]').trigger('click')
     expect(wrapper.get('[data-clear-crud-detail="destinations"] .crud-field-error').text()).toBe('Valor inválido.')
   })
 

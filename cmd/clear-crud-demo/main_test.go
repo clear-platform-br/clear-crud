@@ -29,6 +29,110 @@ const demoReadModelTable = "clear_crud_reference_read_model_demo"
 const demoAuxiliaryCatalogTable = "clear_crud_auxiliary_catalogs"
 const demoAuxiliaryCatalogLookupTable = "clear_crud_auxiliary_catalog_lookup_demo"
 const demoAuxiliaryCatalogChannelLookupTable = "clear_crud_auxiliary_catalog_channel_lookup_demo"
+const demoAuxiliaryDetailLookupTable = "clear_crud_auxiliary_catalog_detail_lookup_demo"
+const demoAuxiliaryDetailLookupChildTable = "clear_crud_auxiliary_catalog_detail_lookup_options"
+
+func TestDemoDetailOnlyLookupSmoke(t *testing.T) {
+	database := newDemoDatabase(t)
+	handler, err := newHandler(database)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. O pai publica o detalhe e os metadados dos campos.
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/crud/"+demoAuxiliaryDetailLookupTable+"/definition", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("detail lookup parent definition = %d: %s", response.Code, response.Body.String())
+	}
+	var parentEnvelope struct {
+		Data crud.PublicDefinition `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &parentEnvelope); err != nil {
+		t.Fatal(err)
+	}
+	if len(parentEnvelope.Data.Details) != 1 || parentEnvelope.Data.Details[0].Resource != demoAuxiliaryDetailLookupChildTable {
+		t.Fatalf("detail lookup relation = %#v", parentEnvelope.Data.Details)
+	}
+	if len(parentEnvelope.Data.Details[0].FieldMetadata) != 2 {
+		t.Fatalf("detail lookup metadata = %#v", parentEnvelope.Data.Details[0].FieldMetadata)
+	}
+
+	// 1.1 O detalhe é permitido somente para o catálogo Estados (code=10).
+	//     Outros catálogos reutilizam a mesma tabela física, mas não recebem
+	//     por acidente a projeção de itens deste smoke.
+	for _, test := range []struct {
+		id         string
+		wantDetail bool
+	}{
+		{id: "10", wantDetail: true},
+		{id: "30", wantDetail: false},
+	} {
+		request = httptest.NewRequest(http.MethodGet, "/api/v1/crud/"+demoAuxiliaryDetailLookupTable+"/records/"+test.id, nil)
+		response = httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusOK {
+			t.Fatalf("detail lookup parent %s = %d: %s", test.id, response.Code, response.Body.String())
+		}
+		var recordEnvelope struct {
+			Data crud.Record `json:"data"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &recordEnvelope); err != nil {
+			t.Fatalf("decode detail lookup parent %s: %v", test.id, err)
+		}
+		_, gotDetail := recordEnvelope.Data.Details["options"]
+		if gotDetail != test.wantDetail {
+			t.Fatalf("detail lookup parent %s details = %#v, want present=%t", test.id, recordEnvelope.Data.Details, test.wantDetail)
+		}
+	}
+
+	// 2. O filho expõe apenas metadados seguros; ações e CRUD independente não.
+	request = httptest.NewRequest(http.MethodGet, "/api/v1/crud/"+demoAuxiliaryDetailLookupChildTable+"/definition", nil)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("detail-only definition = %d: %s", response.Code, response.Body.String())
+	}
+	var childEnvelope struct {
+		Data crud.PublicDefinition `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &childEnvelope); err != nil {
+		t.Fatal(err)
+	}
+	if len(childEnvelope.Data.Actions) != 0 {
+		t.Fatalf("detail-only actions = %#v, want none", childEnvelope.Data.Actions)
+	}
+	valueField := findPublicField(t, childEnvelope.Data.Fields, "value_1")
+	if valueField.Type != crud.FieldLookup || valueField.Lookup == nil || valueField.Lookup.Resource != demoAuxiliaryDetailLookupChildTable {
+		t.Fatalf("detail-only lookup field = %#v", valueField)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/api/v1/crud/"+demoAuxiliaryDetailLookupChildTable+"/records", nil)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("direct detail-only list = %d: %s", response.Code, response.Body.String())
+	}
+
+	// 3. O lookup interno retorna o rótulo humano, não o valor persistido.
+	request = httptest.NewRequest(http.MethodGet, "/api/v1/crud/"+demoAuxiliaryDetailLookupChildTable+"/lookups/value_1?q=Paulo", nil)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "São Paulo") || strings.Contains(response.Body.String(), "Distrito Federal") {
+		t.Fatalf("detail-only lookup = %d: %s", response.Code, response.Body.String())
+	}
+
+	// 4. Uma edição permitida dentro de Estados atravessa a mesma mutation
+	// transacional usada pelo renderer; o smoke não usa uma rota filha.
+	request = httptest.NewRequest(http.MethodPut, "/api/v1/crud/"+demoAuxiliaryDetailLookupTable+"/records/10", strings.NewReader(`{"version":1,"fields":{"code":10,"title":"Estados","max_options":99,"active":true,"management":"fixed","value_1_label":"Sigla","value_1_type":"text","value_1_required":true,"value_2_label":"Nome","value_2_type":"text","value_2_required":false},"details":{"options":[{"id":"1001","version":1,"fields":{"value_1":"SP","value_2":"São Paulo"}}]}}`))
+	request.Header.Set("Content-Type", "application/json")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("detail-only update = %d: %s", response.Code, response.Body.String())
+	}
+}
 
 func TestDemoHandlerServesTheAutomaticResource(t *testing.T) {
 	database := newDemoDatabase(t)

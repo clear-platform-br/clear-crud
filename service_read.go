@@ -52,7 +52,7 @@ func (service *Service) Get(ctx context.Context, key ResourceKey, id RecordID) (
 
 // Lookup returns only the value and label shape declared by a lookup field.
 func (service *Service) Lookup(ctx context.Context, key ResourceKey, fieldKey FieldKey, query LookupQuery) (LookupPage, error) {
-	state, err := service.resolveRead(ctx, key)
+	state, err := service.resolveAuthorized(ctx, key)
 	if err != nil {
 		return LookupPage{}, err
 	}
@@ -67,7 +67,7 @@ func (service *Service) Lookup(ctx context.Context, key ResourceKey, fieldKey Fi
 	target := state
 	if field.Lookup.Resource != key {
 		if _, exists := service.registry.Get(field.Lookup.Resource); exists {
-			target, err = service.resolveRead(ctx, field.Lookup.Resource)
+			target, err = service.resolveAuthorized(ctx, field.Lookup.Resource)
 			if err != nil {
 				return LookupPage{}, err
 			}

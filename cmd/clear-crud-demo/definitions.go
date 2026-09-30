@@ -141,7 +141,13 @@ func registerReferenceCatalogDemo(ctx context.Context, database *sql.DB, registr
 	if err := registerAuxiliaryCatalogLookupDemo(ctx, database, registry, "clear_crud_auxiliary_catalog_lookup_demo", "10", "20"); err != nil {
 		return err
 	}
-	return registerAuxiliaryChannelLookupDemo(ctx, database, registry)
+	if err := registerAuxiliaryChannelLookupDemo(ctx, database, registry); err != nil {
+		return err
+	}
+
+	// 5. Smoke de lookup dentro de detalhe-only: o filho continua sem CRUD
+	// independente, mas expõe metadados e o lookup declarado para o renderer.
+	return registerAuxiliaryDetailLookupDemo(ctx, database, registry)
 }
 
 func registerAuxiliaryCatalogLookupDemo(ctx context.Context, database *sql.DB, registry *crud.Registry, resource crud.ResourceKey, catalogIDs ...string) error {
@@ -192,6 +198,83 @@ func registerAuxiliaryChannelLookupDemo(ctx context.Context, database *sql.DB, r
 		sqladapter.WithGridColumns("name", "channel"),
 		sqladapter.WithFormFields("name", "channel"),
 	)
+}
+
+func registerAuxiliaryDetailLookupDemo(ctx context.Context, database *sql.DB, registry *crud.Registry) error {
+	const (
+		parentResource = crud.ResourceKey("clear_crud_auxiliary_catalog_detail_lookup_demo")
+		childResource  = crud.ResourceKey("clear_crud_auxiliary_catalog_detail_lookup_options")
+	)
+
+	// 1. Pai: reutilize a tabela física e publique somente o nome do catálogo.
+	catalogs, err := sqladapter.AutoTenantTable(
+		ctx,
+		database,
+		"clear_crud_auxiliary_catalogs",
+		sqladapter.WithResourceKey(parentResource),
+		sqladapter.WithGridPageSize(10),
+		sqladapter.WithDefaultSort(
+			crud.Sort{Field: "active", Direction: crud.SortAscending},
+			crud.Sort{Field: "title", Direction: crud.SortAscending},
+		),
+		sqladapter.WithGridColumns("title"),
+		sqladapter.WithFormFields("title"),
+	)
+	if err != nil {
+		return err
+	}
+
+	// 2. Filho: a mesma tabela física recebe uma projeção de lookup.
+	//    O recurso é detail-only: só pode ser usado como detalhe do pai.
+	options, err := sqladapter.AutoTenantTable(
+		ctx,
+		database,
+		"clear_crud_auxiliary_catalog_options",
+		sqladapter.WithResourceKey(childResource),
+		sqladapter.WithHardDelete(),
+		sqladapter.WithLookup("value_1", crud.LookupDefinition{
+			Resource:   childResource,
+			ValueField: "value_1",
+			LabelField: "value_2",
+			FixedFilters: []crud.FixedLookupFilter{
+				{Field: "catalog_id", Values: []crud.Value{"10"}},
+				{Field: "active", Values: []crud.Value{true}},
+			},
+			PageSize: 25,
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	options.Access = crud.ResourceAccessDetailOnly
+	for index := range options.Fields {
+		switch options.Fields[index].Key {
+		case "catalog_id":
+			options.Fields[index].ReadOnly = true
+			options.Fields[index].Visible = false
+		case "sequence", "active", "sort_order":
+			options.Fields[index].Visible = false
+		}
+	}
+
+	// 3. Relação: os labels vêm dos metadados do pai; o tipo lookup é
+	//    declarado pelo filho sem regra específica de catálogo no core.
+	catalogs.Details = []crud.DetailDefinition{{
+		Key: "options", Resource: childResource, ParentField: "catalog_id", Maximum: 99,
+		AllowCreate: true, AllowUpdate: true, AllowDelete: true,
+		ParentAccess: &crud.DetailParentAccess{Field: "code", Values: []crud.Value{int64(10)}},
+		FieldMetadata: []crud.DetailFieldMetadataSource{
+			{Field: "value_1", LabelField: "value_1_label", RequiredField: "value_1_required"},
+			{Field: "value_2", LabelField: "value_2_label", RequiredField: "value_2_required"},
+		},
+	}}
+	catalogs.Presentation.TitleField = "title"
+
+	// 4. Registro: nenhum endpoint ou regra de catálogo é criado no demo.
+	if err := registry.Register(ctx, catalogs); err != nil {
+		return err
+	}
+	return registry.Register(ctx, options)
 }
 
 func registerAuxiliaryCatalogDemo(ctx context.Context, database *sql.DB, registry *crud.Registry) error {

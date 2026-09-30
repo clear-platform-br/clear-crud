@@ -58,12 +58,12 @@ export class CrudController {
     this.patch({ editor: { ...this.state.editor, fields, detailFields: effectiveDetailFields(this.requireDefinition(), fields) } })
   }
   updateDetail(key: string, index: number, field: string, value: Value): void {
-    const editor = this.requireEditor(); const rows = [...(editor.details[key] ?? [])]; const detail = this.requireDefinition().Details.find((item) => item.Key === key); if (!detail || !rows[index]) return
+    const editor = this.requireEditor(); const rows = [...(editor.details[key] ?? [])]; const detail = this.requireDefinition().Details.find((item) => item.Key === key); if (!detail || !Object.prototype.hasOwnProperty.call(editor.details, key) || !rows[index]) return
     const fields = clearLookupDependents(editor.detailFields?.[key] ?? detail.Fields, { ...rows[index].fields, [field]: value }, field)
     rows[index] = { ...rows[index], fields }; this.patch({ editor: { ...editor, details: { ...editor.details, [key]: rows } } })
   }
-  addDetail(key: string): void { const editor = this.requireEditor(); const detail = this.requireDefinition().Details.find((item) => item.Key === key); const fields = editor.detailFields?.[key] ?? detail?.Fields; if (!detail || !fields || editor.details[key].filter((row) => !row.delete).length >= detail.Maximum) return; this.patch({ editor: { ...editor, details: { ...editor.details, [key]: [...editor.details[key], { fields: blankFields(fields) }] } } }) }
-  removeDetail(key: string, index: number): void { const editor = this.requireEditor(); const rows = [...editor.details[key]]; const row = rows[index]; if (!row.id) rows.splice(index, 1); else rows[index] = { ...row, delete: true }; this.patch({ editor: { ...editor, details: { ...editor.details, [key]: rows } } }) }
+  addDetail(key: string): void { const editor = this.requireEditor(); const detail = this.requireDefinition().Details.find((item) => item.Key === key); const fields = editor.detailFields?.[key] ?? detail?.Fields; const rows = editor.details[key]; if (!detail || !fields || !rows || rows.filter((row) => !row.delete).length >= detail.Maximum) return; this.patch({ editor: { ...editor, details: { ...editor.details, [key]: [...rows, { fields: blankFields(fields) }] } } }) }
+  removeDetail(key: string, index: number): void { const editor = this.requireEditor(); const rows = editor.details[key]; if (!rows) return; const nextRows = [...rows]; const row = nextRows[index]; if (!row) return; if (!row.id) nextRows.splice(index, 1); else nextRows[index] = { ...row, delete: true }; this.patch({ editor: { ...editor, details: { ...editor.details, [key]: nextRows } } }) }
 
   async submit(): Promise<void> {
     const editor = this.requireEditor()
@@ -128,12 +128,13 @@ function clearLookupDependents(fields: PublicDefinition['Fields'], values: Recor
 function blankDetails(definition: PublicDefinition): Record<string, DetailMutation[]> { return Object.fromEntries(definition.Details.map((detail) => [detail.Key, []])) }
 function effectiveDetailFields(definition: PublicDefinition, parentFields: Record<string, Value>): Record<string, PublicDefinition['Details'][number]['Fields']> { return Object.fromEntries(definition.Details.map((detail) => [detail.Key, resolveDetailFields(detail, parentFields)])) }
 function recordToDraft(record: CrudRecord, definition: PublicDefinition): EditorDraft {
-  const detailFields = effectiveDetailFields(definition, record.Fields)
+  const availableDetails = new Set(Object.keys(record.Details ?? {}))
+  const detailFields = Object.fromEntries(definition.Details.filter((detail) => availableDetails.has(detail.Key)).map((detail) => [detail.Key, resolveDetailFields(detail, record.Fields)]))
   return {
     id: record.ID,
     version: record.Version,
     fields: recordFields(definition.Fields, record.Fields),
-    details: Object.fromEntries(definition.Details.map((detail) => [
+    details: Object.fromEntries(definition.Details.filter((detail) => availableDetails.has(detail.Key)).map((detail) => [
       detail.Key,
       (record.Details?.[detail.Key] ?? []).map((child) => ({
         id: child.ID,
@@ -157,6 +158,7 @@ function validateDraft(definition: PublicDefinition, draft: EditorDraft): Record
   const errors: Record<string, string> = {}
   for (const field of definition.Fields) if (!draft.id || !field.CreateOnly) validateField(errors, field.Key, field, draft.fields[field.Key])
   for (const detail of definition.Details) {
+    if (!Object.prototype.hasOwnProperty.call(draft.details, detail.Key)) continue
     const rows = draft.details[detail.Key] ?? []
     const count = rows.filter((row) => !row.delete).length
     if (count < detail.Minimum || count > detail.Maximum) errors[detail.Key] = 'crud.detail.cardinality'
@@ -168,7 +170,7 @@ function mutationFields(definition: PublicDefinition, draft: EditorDraft): Recor
   return Object.fromEntries(Object.entries(draft.fields).filter(([key]) => !draft.id || !definition.Fields.find((field) => field.Key === key)?.CreateOnly))
 }
 function mutationDetails(definition: PublicDefinition, draft: EditorDraft): Record<string, DetailMutation[]> {
-  return Object.fromEntries(definition.Details.map((detail) => [detail.Key, (draft.details[detail.Key] ?? []).map((row) => ({
+  return Object.fromEntries(definition.Details.filter((detail) => Object.prototype.hasOwnProperty.call(draft.details, detail.Key)).map((detail) => [detail.Key, (draft.details[detail.Key] ?? []).map((row) => ({
     ...row,
     fields: Object.fromEntries(Object.entries(row.fields).filter(([key]) => {
       const field = draft.detailFields?.[detail.Key]?.find((candidate) => candidate.Key === key) ?? detail.Fields.find((candidate) => candidate.Key === key)

@@ -144,7 +144,7 @@ describe('CrudController', () => {
     expect(controller.snapshot().feedback).toMatchObject({ kind: 'error', message: 'crud.ui.validation', fields: { name: 'crud.field.length' } })
   })
 
-  it('normalizes SQLite boolean values before updating a record', async () => {
+	it('normalizes SQLite boolean values before updating a record', async () => {
     const client = transport()
     client.definition = async () => ({ ...definition, Fields: [{ Key: 'enabled', Label: 'contacts.enabled', Type: 'boolean', Required: true, ReadOnly: false, Visible: true, Sensitive: false }, ...definition.Fields], Details: [] })
     client.get = async () => ({ ID: '1', Version: 1, Fields: { enabled: 1, name: 'Ana' } })
@@ -152,8 +152,19 @@ describe('CrudController', () => {
     await controller.load()
     await controller.beginEdit({ ID: '1', Version: 1, Fields: { enabled: 1, name: 'Ana' } })
     await controller.submit()
-    expect(client.mutations).toEqual([{ fields: { enabled: true, name: 'Ana' }, details: {} }])
-  })
+		expect(client.mutations).toEqual([{ fields: { enabled: true, name: 'Ana' }, details: {} }])
+	})
+
+	it('keeps a detail-only collection unavailable when the record omits it', async () => {
+		const client = transport()
+		client.get = async () => ({ ID: '1', Version: 1, Fields: { name: 'Ana' } })
+		const controller = new CrudController('contacts', client)
+		await controller.load()
+		await controller.beginEdit({ ID: '1', Version: 1, Fields: { name: 'Ana' } })
+		expect(controller.snapshot().editor?.details).toEqual({})
+		await controller.submit()
+		expect(client.mutations).toEqual([{ fields: { name: 'Ana' }, details: {} }])
+	})
 
   it('normalizes SQLite boolean values in existing detail rows before updating', async () => {
     const client = transport()
