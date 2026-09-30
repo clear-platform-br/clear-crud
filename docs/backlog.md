@@ -317,6 +317,10 @@ ordem dos registros. No clear-crud, essas decisões ficam separadas:
 
 - `[x]` Escopo confiável obrigatório antes de consultas e mutações.
 - `[x]` Tenant nunca escolhido pelo navegador.
+- `[x]` Chaves de escopo server-owned adicionais podem particionar recursos e
+  read models por `Definition.Scope.Keys`/`ScopeColumns`; o `ScopeProvider`
+  fornece os valores e o navegador não os escolhe. Isso não substitui filtros
+  opcionais de grade nem transforma política do pai em status dos filhos.
 - `[x]` Permissões revalidadas no backend.
 - `[x]` Archive e hard delete com política explícita.
 - `[x]` Visibilidade declarada de archive no Grid: manter `active_only` por
