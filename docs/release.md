@@ -34,3 +34,16 @@ Depois que houver consumidores externos, uma release compatível só pode:
 Toda mudança incompatível exige nova major, contrato versionado, guia de
 migração e período explícito de coexistência. Testes de regressão devem provar
 que uma definição sem a nova opção continua produzindo o comportamento anterior.
+
+## Capability de metadados mestre-detalhe
+
+O core e os pacotes frontend mantêm os contratos existentes e adicionam
+`DetailFieldMetadataSource`/`FieldMetadata` como opção vazia por default. A
+release não cria campos nem exige alteração de schema: ela resolve label, tipo,
+requiredness e visibilidade somente para slots filhos já declarados. Um
+consumidor que não declara o mapa mantém exatamente o mestre-detalhe anterior.
+
+Para o piloto atual, publique a mesma versão experimental do client e do Vue;
+o consumidor deve fixar essa versão pública e não usar `replace`, cópia ou
+renderer local. O core correspondente deve ser publicado antes de o produto
+registrar uma definição com `FieldMetadata`.

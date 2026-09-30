@@ -222,6 +222,10 @@ func TestDemoHandlerServesTheAutomaticResource(t *testing.T) {
 	if len(auxiliaryEnvelope.Data.Details) != 1 || auxiliaryEnvelope.Data.Details[0].Key != "options" {
 		t.Fatalf("auxiliary catalog details = %#v", auxiliaryEnvelope.Data.Details)
 	}
+	metadata := auxiliaryEnvelope.Data.Details[0].FieldMetadata
+	if len(metadata) != 2 || metadata[0].Field != "value_1" || metadata[0].LabelField != "value_1_label" || metadata[1].Field != "value_2" || metadata[1].RequiredField != "value_2_required" {
+		t.Fatalf("auxiliary catalog detail metadata = %#v", metadata)
+	}
 	if len(auxiliaryEnvelope.Data.Grid.Columns) != 1 || auxiliaryEnvelope.Data.Grid.Columns[0] != "title" {
 		t.Fatalf("auxiliary catalog grid = %#v, want only table title", auxiliaryEnvelope.Data.Grid.Columns)
 	}

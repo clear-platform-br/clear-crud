@@ -33,6 +33,27 @@ describe('CrudEditor', () => {
     expect(wrapper.emitted('addDetail')).toEqual([['destinations']])
   })
 
+  it('renders a resolved literal label for a fixed child slot', () => {
+    const metadataDefinition: PublicDefinition = {
+      ...definition,
+      Details: [{
+        ...definition.Details[0],
+        Fields: [
+          { ...definition.Details[0].Fields[0], Key: 'value_1', Label: 'crud.value_1' },
+          { ...definition.Details[0].Fields[0], Key: 'value_2', Label: 'crud.value_2' },
+        ],
+        FieldMetadata: [{ Field: 'value_1', LabelField: 'value_label' }, { Field: 'value_2', LabelField: 'value_2_label' }],
+      }],
+    }
+    const wrapper = mount(CrudEditor, { props: {
+      definition: metadataDefinition,
+      editor: { fields: { name: 'Categorias financeiras', value_label: 'Nome da categoria', value_2_label: '' }, details: { destinations: [{ fields: { value_1: 'Energia' } }] } },
+      messages: ptBR, translate: createTranslator(ptBR), submitting: false, lookup: async () => [],
+    } })
+    expect(wrapper.get('[data-clear-crud-detail="destinations"] .crud-field-label').text()).toContain('Nome da categoria')
+    expect(wrapper.findAll('[data-clear-crud-detail="destinations"] .crud-field')).toHaveLength(1)
+  })
+
   it('shows a qualified server error beside the child field', async () => {
     const draft: EditorDraft = { fields: { name: 'Ana' }, details: { destinations: [{ fields: { address: 'bad' } }] } }
     const wrapper = mount(CrudEditor, { props: { definition, editor: draft, feedback: { kind: 'error', message: 'crud.ui.validation', fields: { 'destinations.address': 'crud.field.invalid' } }, messages: ptBR, translate: createTranslator(ptBR), submitting: false, lookup: async () => [] } })

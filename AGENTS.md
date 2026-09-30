@@ -10,6 +10,16 @@ Antes de qualquer agente criar ou alterar um CRUD consumidor, deve ler e aplicar
 de uso próprio é obrigatório e a ausência de capability pública nunca autoriza
 fallback, renderer, handler ou motor CRUD local no produto.
 
+Antes de propor código no consumidor, o agente deve consultar também o mapa de
+capabilities (`docs/capability-map.md`), o catálogo de settings
+(`docs/settings-catalog.json`) e o backlog (`docs/backlog.md`). Se a capability
+já existir, deve usar sua definição pública; se não existir, deve parar no
+consumidor e abrir uma evolução genérica, testada e versionada aqui. É proibido
+inventar uma tela paralela, copiar o renderer ou adaptar o core ao domínio.
+Para mestre-detalhe com slots configuráveis, a receita canônica é
+`DetailDefinition.FieldMetadata`; não criar campos dinâmicos, endpoints de TdT
+ou regras específicas de catálogo.
+
 O contrato canônico é governado no repositório `clear_platform` pelos IDs:
 
 - `clear.crud.definition.v1`;

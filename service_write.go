@@ -12,10 +12,7 @@ func (service *Service) Create(ctx context.Context, key ResourceKey, mutation Mu
 	if err != nil {
 		return Record{}, err
 	}
-	detailChanges, err := service.normalizeDetailChanges(ctx, state, normalized.Details)
-	if err != nil {
-		return Record{}, err
-	}
+	detailMutations := normalized.Details
 	normalized.Details = nil
 	var created Record
 	var detailEvents []detailEvent
@@ -28,6 +25,11 @@ func (service *Service) Create(ctx context.Context, key ResourceKey, mutation Mu
 		record, err := state.definition.Source.Create(transaction, state.scope, normalized)
 		if err != nil {
 			return unavailable(err)
+		}
+		parentFields := mergeParentFields(record.Fields, normalized.Fields)
+		detailChanges, err := service.normalizeDetailChanges(transaction, state, parentFields, detailMutations)
+		if err != nil {
+			return err
 		}
 		if err := service.audit.Append(transaction, service.auditEvent(transaction, state, ActionCreate, record.ID, 0, record.Version)); err != nil {
 			return unavailable(err)
@@ -67,10 +69,7 @@ func (service *Service) Update(ctx context.Context, key ResourceKey, id RecordID
 	if err != nil {
 		return Record{}, err
 	}
-	detailChanges, err := service.normalizeDetailChanges(ctx, state, normalized.Details)
-	if err != nil {
-		return Record{}, err
-	}
+	detailMutations := normalized.Details
 	normalized.Details = nil
 	var updated Record
 	var detailEvents []detailEvent
@@ -86,6 +85,11 @@ func (service *Service) Update(ctx context.Context, key ResourceKey, id RecordID
 			if err := state.definition.Hooks.BeforeUpdate(transaction, state.scope, current, normalized); err != nil {
 				return unavailable(err)
 			}
+		}
+		parentFields := mergeParentFields(current.Fields, normalized.Fields)
+		detailChanges, err := service.normalizeDetailChanges(transaction, state, parentFields, detailMutations)
+		if err != nil {
+			return err
 		}
 		record, err := state.definition.Source.Update(transaction, state.scope, id, version, normalized)
 		if err != nil {
@@ -114,6 +118,14 @@ func (service *Service) Update(ctx context.Context, key ResourceKey, id RecordID
 		service.afterCommit(ctx, event.definition, event.event)
 	}
 	return updated, nil
+}
+
+func mergeParentFields(base, override Fields) Fields {
+	merged := cloneFields(base)
+	for key, value := range override {
+		merged[key] = value
+	}
+	return merged
 }
 
 // Delete applies the registered archive or hard-delete policy atomically.

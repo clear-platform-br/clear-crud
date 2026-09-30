@@ -136,7 +136,11 @@ func cloneDefinition(definition Definition) Definition {
 			clone.Fields[index].Lookup = &lookup
 		}
 	}
-	clone.Details = append([]DetailDefinition(nil), definition.Details...)
+	clone.Details = make([]DetailDefinition, len(definition.Details))
+	for index, detail := range definition.Details {
+		clone.Details[index] = detail
+		clone.Details[index].FieldMetadata = append([]DetailFieldMetadataSource(nil), detail.FieldMetadata...)
+	}
 	clone.Grid.Columns = append([]FieldKey(nil), definition.Grid.Columns...)
 	clone.Grid.Searchable = append([]FieldKey(nil), definition.Grid.Searchable...)
 	clone.Grid.Sortable = append([]FieldKey(nil), definition.Grid.Sortable...)

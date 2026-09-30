@@ -32,9 +32,6 @@ func validateFields(fields []Field) (map[FieldKey]Field, error) {
 			if field.ReadOnly {
 				return nil, invalidDefinition(path+".default", "is not allowed on read-only fields")
 			}
-			if !field.Visible {
-				return nil, invalidDefinition(path+".default", "requires a visible field")
-			}
 			if field.Sensitive {
 				return nil, invalidDefinition(path+".default", "is not allowed on sensitive fields")
 			}

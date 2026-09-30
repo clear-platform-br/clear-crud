@@ -112,8 +112,12 @@ const (
 type Field struct {
 	Key   FieldKey
 	Label MessageCode
-	Help  MessageCode
-	Type  FieldType
+	// DisplayLabel is an optional server-resolved literal label. It is used
+	// when a registered parent record supplies presentation metadata for an
+	// existing child field; static definitions continue to use Label.
+	DisplayLabel string `json:",omitempty"`
+	Help         MessageCode
+	Type         FieldType
 	// Required is preserved for compatibility with definition.v1 consumers.
 	// New definitions are required by default; use Optional for the exception.
 	Required bool
@@ -129,8 +133,9 @@ type Field struct {
 	Visible    bool
 	Sensitive  bool
 	// Default is a static value used for a new record. It is exposed to the
-	// renderer for a visible create form and applied again by the core when a
-	// create mutation omits the field. Dynamic defaults remain adapter-owned.
+	// renderer for a visible create form and applied by the core even when the
+	// field is hidden. Hidden defaults are useful for server-owned technical
+	// fields; dynamic defaults remain adapter-owned.
 	Default        Value           `json:",omitempty"`
 	BooleanDisplay *BooleanDisplay `json:",omitempty"`
 	EnumControl    EnumControl     `json:",omitempty"`
@@ -260,17 +265,29 @@ type DeletePolicy struct {
 	Mode DeleteMode
 }
 
+// DetailFieldMetadataSource maps optional parent fields to metadata overrides
+// for one already-declared child field. It never creates fields or changes the
+// child storage contract. The mapping is server-owned and the browser cannot
+// provide it.
+type DetailFieldMetadataSource struct {
+	Field         FieldKey
+	LabelField    FieldKey `json:",omitempty"`
+	TypeField     FieldKey `json:",omitempty"`
+	RequiredField FieldKey `json:",omitempty"`
+}
+
 // DetailDefinition declares one server-registered child collection. ParentField
 // is internal: the service supplies the parent record ID and rejects client input.
 type DetailDefinition struct {
-	Key         DetailKey
-	Resource    ResourceKey
-	ParentField FieldKey
-	Minimum     uint16
-	Maximum     uint16
-	AllowCreate bool
-	AllowUpdate bool
-	AllowDelete bool
+	Key           DetailKey
+	Resource      ResourceKey
+	ParentField   FieldKey
+	Minimum       uint16
+	Maximum       uint16
+	AllowCreate   bool
+	AllowUpdate   bool
+	AllowDelete   bool
+	FieldMetadata []DetailFieldMetadataSource
 }
 
 // FieldErrors maps a field to a safe, localizable validation message.
