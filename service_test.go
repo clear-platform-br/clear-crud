@@ -91,6 +91,66 @@ func TestServiceListNormalizesScopeQueryAndRecordFields(t *testing.T) {
 	}
 }
 
+func TestServiceListAttachesValidatedNumericFilterRanges(t *testing.T) {
+	t.Parallel()
+
+	definition := validDefinition("bounded_categories")
+	definition.Fields = append(definition.Fields,
+		Field{Key: "year", Label: "crud.year", Type: FieldInteger, Visible: true},
+		Field{Key: "amount", Label: "crud.amount", Type: FieldDecimal, Visible: true},
+		Field{Key: "secret_number", Label: "crud.secret_number", Type: FieldInteger, Visible: true, Sensitive: true},
+	)
+	definition.Grid.Columns = []FieldKey{"name", "year", "amount", "secret_number"}
+	definition.Grid.ArchiveVisibility = ArchiveVisibilityActiveAndArchived
+
+	t.Run("attaches only source-provided ranges for public numeric columns", func(t *testing.T) {
+		source := &recordingSource{
+			capabilities: capabilitiesWithNumericRanges(),
+			ranges: map[FieldKey]NumericFilterRange{
+				"year":   {Minimum: "1969", Maximum: "2003"},
+				"amount": {Minimum: "100.00", Maximum: "1000000.00"},
+			},
+		}
+		registry := registryWithDefinition(t, definition, source)
+		service := newServiceForRegistry(t, registry, source, &recordingAuthorizer{})
+		page, err := service.List(context.Background(), definition.Key, Query{IncludeArchived: true})
+		if err != nil {
+			t.Fatalf("List() error = %v", err)
+		}
+		if len(page.FilterRanges) != 2 || page.FilterRanges["year"].Minimum != "1969" || page.FilterRanges["amount"].Maximum != "1000000.00" {
+			t.Fatalf("FilterRanges = %#v", page.FilterRanges)
+		}
+		if source.rangeCalls != 1 || source.rangeIncludeArchived != true || source.rangeScope["tenant_id"] != "tenant-a" || len(source.rangeFields) != 2 || source.rangeFields[0] != "year" || source.rangeFields[1] != "amount" {
+			t.Fatalf("range request = calls %d, scope %#v, includeArchived %v, fields %#v", source.rangeCalls, source.rangeScope, source.rangeIncludeArchived, source.rangeFields)
+		}
+	})
+
+	t.Run("rejects malformed source bounds", func(t *testing.T) {
+		source := &recordingSource{
+			capabilities: capabilitiesWithNumericRanges(),
+			ranges:       map[FieldKey]NumericFilterRange{"year": {Minimum: "2004", Maximum: "1969"}},
+		}
+		registry := registryWithDefinition(t, definition, source)
+		service := newServiceForRegistry(t, registry, source, &recordingAuthorizer{})
+		if _, err := service.List(context.Background(), definition.Key, Query{}); err == nil {
+			t.Fatal("List() accepted reversed numeric bounds")
+		} else {
+			assertCode(t, err, ErrorTemporarilyUnavailable)
+		}
+	})
+
+	t.Run("reports range-source failure as unavailable", func(t *testing.T) {
+		source := &recordingSource{capabilities: capabilitiesWithNumericRanges(), rangeErr: errors.New("aggregate failed")}
+		registry := registryWithDefinition(t, definition, source)
+		service := newServiceForRegistry(t, registry, source, &recordingAuthorizer{})
+		if _, err := service.List(context.Background(), definition.Key, Query{}); err == nil {
+			t.Fatal("List() ignored range-source failure")
+		} else {
+			assertCode(t, err, ErrorTemporarilyUnavailable)
+		}
+	})
+}
+
 func TestServicePreservesServerOwnedReadOnlyGridProjection(t *testing.T) {
 	t.Parallel()
 
@@ -441,9 +501,25 @@ func newServiceForRegistry(t *testing.T, registry *Registry, source *recordingSo
 	return service
 }
 
+func registryWithDefinition(t *testing.T, definition Definition, source *recordingSource) *Registry {
+	t.Helper()
+	definition.Source = source
+	registry := NewRegistry()
+	if err := registry.Register(context.Background(), definition); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	return registry
+}
+
 func serviceCapabilities() Capabilities {
 	capabilities := mutableCapabilities()
 	capabilities[CapabilityContainsSearch] = struct{}{}
+	return capabilities
+}
+
+func capabilitiesWithNumericRanges() Capabilities {
+	capabilities := serviceCapabilities()
+	capabilities[CapabilityNumericRanges] = struct{}{}
 	return capabilities
 }
 
@@ -465,19 +541,25 @@ func assertCode(t *testing.T, err error, want ErrorCode) {
 }
 
 type recordingSource struct {
-	capabilities Capabilities
-	listPage     Page
-	listScope    Scope
-	listQuery    Query
-	listCalls    int
-	getRecord    Record
-	getCalls     int
-	lookupPage   LookupPage
-	lookupQuery  LookupQuery
-	lookupCalls  int
-	listErr      error
-	getErr       error
-	lookupErr    error
+	capabilities         Capabilities
+	listPage             Page
+	listScope            Scope
+	listQuery            Query
+	listCalls            int
+	getRecord            Record
+	getCalls             int
+	lookupPage           LookupPage
+	lookupQuery          LookupQuery
+	lookupCalls          int
+	listErr              error
+	getErr               error
+	lookupErr            error
+	ranges               map[FieldKey]NumericFilterRange
+	rangeErr             error
+	rangeCalls           int
+	rangeScope           Scope
+	rangeFields          []FieldKey
+	rangeIncludeArchived bool
 }
 
 func (source *recordingSource) Capabilities(context.Context) Capabilities { return source.capabilities }
@@ -503,6 +585,13 @@ func (source *recordingSource) Lookup(_ context.Context, _ Scope, query LookupQu
 	source.lookupCalls++
 	source.lookupQuery = query
 	return source.lookupPage, source.lookupErr
+}
+func (source *recordingSource) NumericFilterRanges(_ context.Context, scope Scope, includeArchived bool, fields []FieldKey) (map[FieldKey]NumericFilterRange, error) {
+	source.rangeCalls++
+	source.rangeScope = cloneScope(scope)
+	source.rangeFields = append([]FieldKey(nil), fields...)
+	source.rangeIncludeArchived = includeArchived
+	return source.ranges, source.rangeErr
 }
 
 type principalStub struct{ err error }

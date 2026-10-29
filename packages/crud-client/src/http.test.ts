@@ -70,6 +70,31 @@ describe('HttpCrudClient', () => {
     await expect(client.list('contacts', {})).resolves.toEqual({ records: [{ ID: '1', Version: 2, Fields: { name: 'Ana' }, Details: { destinations: [{ ID: '2', Version: 1, Fields: { address: 'ana@example.com' } }] } }], page: 1, size: 25, total: 1, nextCursor: undefined })
   })
 
+  it('normalizes a report contract and server-computed page subtotals', async () => {
+    const client = new HttpCrudClient({ fetch: async (input) => {
+      if (String(input).endsWith('/definition')) return response(200, { data: {
+        Key: 'report', Labels: {}, Fields: [], Details: [],
+        Grid: { Report: { Groups: [{ Field: 'year', Direction: 'asc' }], Measures: [{ Key: 'documents', Label: 'report.documents', Operation: 'count' }] } },
+        Form: {}, Presentation: {}, Actions: [],
+      } })
+      return response(200, { data: [{ ID: '1', Version: 1, Fields: { year: 2025 } }], meta: {
+        page: 1, size: 10, total: 1,
+        report: { Subtotals: [{ Level: 1, Values: [2025], Measures: [{ Key: 'documents', Value: '4' }] }] },
+      } })
+    } })
+    await expect(client.definition('report')).resolves.toMatchObject({ Grid: { Report: { Groups: [{ Field: 'year', Direction: 'asc' }] } } })
+    await expect(client.list('report', {})).resolves.toMatchObject({ report: { Subtotals: [{ Level: 1, Values: [2025], Measures: [{ Key: 'documents', Value: '4' }] }] } })
+  })
+
+  it('normalizes server-owned numeric filter ranges without losing decimal precision', async () => {
+    const client = new HttpCrudClient({ fetch: async () => response(200, {
+      data: [], meta: { filterRanges: { year: { minimum: '1969', maximum: '2003' }, amount: { Minimum: '100.00', Maximum: '1000000.00' } } },
+    }) })
+    await expect(client.list('report', {})).resolves.toMatchObject({ filterRanges: {
+      year: { minimum: '1969', maximum: '2003' }, amount: { minimum: '100.00', maximum: '1000000.00' },
+    } })
+  })
+
   it('serializes typed grid filters', async () => {
     let requestedURL = ''
     const client = new HttpCrudClient({ fetch: async (input) => { requestedURL = String(input); return response(200, { data: [] }) } })

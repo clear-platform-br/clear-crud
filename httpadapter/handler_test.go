@@ -27,6 +27,19 @@ func TestHandlerDefinitionAndErrorsAreSafe(t *testing.T) {
 	}
 }
 
+func TestReportMetadataEncodesLargeAggregatesWithoutPrecisionLoss(t *testing.T) {
+	encoded, err := json.Marshal(reportMetadata(&crud.ReportSummary{Subtotals: []crud.ReportSubtotal{{
+		Level: 1, Values: []crud.Value{"2025"},
+		Measures: []crud.ReportMeasureValue{{Key: "amount", Value: int64(9007199254740993)}},
+	}}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(encoded), `{"subtotals":[{"level":1,"measures":[{"key":"amount","value":"9007199254740993"}],"values":["2025"]}]}`; got != want {
+		t.Fatalf("report JSON = %s, want exact decimal string %s", got, want)
+	}
+}
+
 func TestHandlerRejectsBadRequestBeforeMutation(t *testing.T) {
 	source := &source{}
 	h := testHandler(t, source)

@@ -13,6 +13,7 @@ const enumResource = 'clear_crud_disposable_junk_contacts_enum'
 const enumControlsResource = 'clear_crud_enum_controls_demo'
 const lookupResource = 'clear_crud_reference_lookup_demo'
 const readModelResource = 'clear_crud_reference_read_model_demo'
+const groupedReportResource = 'clear_crud_grouped_report_demo'
 const auxiliaryCatalogResource = 'clear_crud_auxiliary_catalogs'
 const auxiliaryCatalogLookupResource = 'clear_crud_auxiliary_catalog_lookup_demo'
 const auxiliaryCatalogChannelLookupResource = 'clear_crud_auxiliary_catalog_channel_lookup_demo'
@@ -38,6 +39,8 @@ const labels: Record<string, string> = {
   [`crud.${lookupResource}.singular`]: 'Contato geográfico',
   [`crud.${readModelResource}.title`]: 'Modelo de leitura — join e campo calculado',
   [`crud.${readModelResource}.singular`]: 'Contato enriquecido',
+  [`crud.${groupedReportResource}.title`]: 'Relatório — quebras em níveis',
+  [`crud.${groupedReportResource}.singular`]: 'Documento do relatório',
   [`crud.${auxiliaryCatalogResource}.title`]: 'Tabela de Tabelas (TdT)',
   [`crud.${auxiliaryCatalogResource}.singular`]: 'Tabela da TdT',
   [`crud.${auxiliaryCatalogLookupResource}.title`]: 'Consumidor da TdT',
@@ -93,6 +96,12 @@ const labels: Record<string, string> = {
   'crud.field.state_name': 'Estado vindo do join',
   'crud.field.summary': 'Resumo calculado',
   'crud.field.calculated_number': 'Código numérico calculado',
+  'crud.field.year': 'Ano',
+  'crud.field.month': 'Mês',
+  'crud.field.document_name': 'Documento',
+  'crud.field.amount_cents': 'Valor (centavos)',
+  'crud.report.documents': 'Documentos',
+  'crud.report.amount_cents': 'Total (centavos)',
   'crud.field.selected_option': 'Item da TdT',
   'crud.field.active': 'Ativo',
   'crud.field.code': 'Código do catálogo',
@@ -240,6 +249,14 @@ function translate(code: string): string | undefined {
       </header>
       <DefinitionAccordion title="Definição Go desta grade" subtitle="Abra para ver o lookup declarado no filho detail-only" :code="definitionSnippets.auxiliaryDetailLookup" />
       <CrudScreen :resource="auxiliaryDetailLookupResource" :client="client" :messages="ptBR" :resolve-message="translate" />
+    </section>
+    <section class="demo-example">
+      <header class="demo-page-heading">
+        <h2><span class="demo-smoke-label">Smoke 12 · relatório agrupado</span> Ano, mês e subtotais calculados pelo SQL</h2>
+        <p>A tabela intercala as quebras por ano e mês. Contagem e soma são calculadas pelo adapter SQL sobre todos os registros filtrados e do tenant, não apenas sobre as linhas da página; o Vue só exibe os valores recebidos.</p>
+      </header>
+      <DefinitionAccordion title="Definição Go deste relatório" subtitle="Abra para ver níveis, medidas e SELECT server-owned" :code="definitionSnippets.groupedReport" />
+      <CrudScreen :resource="groupedReportResource" :client="client" :messages="ptBR" :resolve-message="translate" />
     </section>
   </main>
 </template>

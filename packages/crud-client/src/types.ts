@@ -3,6 +3,44 @@ export type FilterOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte' | 'contai
 export type FieldType = 'string' | 'text' | 'integer' | 'decimal' | 'boolean' | 'date' | 'datetime' | 'email' | 'phone' | 'enum' | 'lookup'
 export type EnumControl = 'auto' | 'select' | 'radio' | 'segmented' | 'buttons'
 export type ArchiveVisibility = 'active_only' | 'active_and_archived'
+export type ReportOperation = 'count' | 'sum'
+
+export interface ReportGroup {
+  Field: string
+  Direction: 'asc' | 'desc'
+}
+
+export interface ReportMeasure {
+  Key: string
+  Label: string
+  Operation: ReportOperation
+  Field?: string
+}
+
+export interface ReportDefinition {
+  Groups: ReportGroup[]
+  Measures: ReportMeasure[]
+}
+
+export interface ReportMeasureValue {
+  Key: string
+  Value: string | null
+}
+
+export interface ReportSubtotal {
+  Level: number
+  Values: Value[]
+  Measures: ReportMeasureValue[]
+}
+
+export interface ReportSummary {
+  Subtotals: ReportSubtotal[]
+}
+
+export interface NumericFilterRange {
+  minimum: string
+  maximum: string
+}
 export type Value = string | number | boolean | null
 
 export interface Field {
@@ -70,6 +108,7 @@ export interface PublicDefinition {
     DefaultSort: Array<{ Field: string; Direction: 'asc' | 'desc' }>
     Pagination: { Mode: 'offset' | 'cursor'; DefaultSize: number; AllowedSizes: number[]; Total: boolean }
     ArchiveVisibility?: ArchiveVisibility
+    Report?: ReportDefinition
   }
   Form: { Fields: string[] }
   Presentation: { Collection: 'auto' | 'table' | 'cards' | 'list'; Density: 'compact' | 'comfortable'; TitleField?: string }
@@ -110,6 +149,8 @@ export interface Page {
   size: number
   total?: number
   nextCursor?: string
+  report?: ReportSummary
+  filterRanges?: Record<string, NumericFilterRange>
 }
 
 export interface Query {

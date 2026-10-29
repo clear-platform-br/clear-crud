@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +28,7 @@ const demoEnumControlsTable = "clear_crud_enum_controls_demo"
 const demoEnumTable = "clear_crud_disposable_junk_contacts_enum"
 const demoLookupTable = "clear_crud_reference_lookup_demo"
 const demoReadModelTable = "clear_crud_reference_read_model_demo"
+const demoGroupedReportTable = "clear_crud_grouped_report_demo"
 const demoAuxiliaryCatalogTable = "clear_crud_auxiliary_catalogs"
 const demoAuxiliaryCatalogLookupTable = "clear_crud_auxiliary_catalog_lookup_demo"
 const demoAuxiliaryCatalogChannelLookupTable = "clear_crud_auxiliary_catalog_channel_lookup_demo"
@@ -131,6 +134,116 @@ func TestDemoDetailOnlyLookupSmoke(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("detail-only update = %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestDemoGroupedReportSmoke(t *testing.T) {
+	database := newDemoDatabase(t)
+	handler, err := newHandler(database)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. A definição publicada contém somente declaração genérica de níveis e medidas.
+	definitionResponse := httptest.NewRecorder()
+	handler.ServeHTTP(definitionResponse, httptest.NewRequest(http.MethodGet, "/api/v1/crud/"+demoGroupedReportTable+"/definition", nil))
+	if definitionResponse.Code != http.StatusOK {
+		t.Fatalf("grouped report definition = %d: %s", definitionResponse.Code, definitionResponse.Body.String())
+	}
+	var definitionEnvelope struct {
+		Data crud.PublicDefinition `json:"data"`
+	}
+	if err := json.Unmarshal(definitionResponse.Body.Bytes(), &definitionEnvelope); err != nil {
+		t.Fatal(err)
+	}
+	if definitionEnvelope.Data.Grid.Report == nil || len(definitionEnvelope.Data.Grid.Report.Groups) != 2 || len(definitionEnvelope.Data.Grid.Report.Measures) != 2 {
+		t.Fatalf("grouped report metadata = %#v", definitionEnvelope.Data.Grid.Report)
+	}
+
+	// 2. A página tem dois registros, mas os subtotais cobrem o resultado todo
+	//    e excluem tanto o restante da página seguinte quanto outro tenant.
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/crud/"+demoGroupedReportTable+"/records?page=1&size=2", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("grouped report list = %d: %s", response.Code, response.Body.String())
+	}
+	var pageEnvelope struct {
+		Data []crud.Record `json:"data"`
+		Meta struct {
+			Page         uint64                                    `json:"page"`
+			Size         uint16                                    `json:"size"`
+			Total        uint64                                    `json:"total"`
+			Report       crud.ReportSummary                        `json:"report"`
+			FilterRanges map[crud.FieldKey]crud.NumericFilterRange `json:"filterRanges"`
+		} `json:"meta"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &pageEnvelope); err != nil {
+		t.Fatal(err)
+	}
+	if len(pageEnvelope.Data) != 2 || pageEnvelope.Meta.Page != 1 || pageEnvelope.Meta.Size != 2 || pageEnvelope.Meta.Total != 6 {
+		t.Fatalf("grouped report page = records:%d meta:%#v", len(pageEnvelope.Data), pageEnvelope.Meta)
+	}
+	if pageEnvelope.Meta.FilterRanges["year"] != (crud.NumericFilterRange{Minimum: "2025", Maximum: "2026"}) || pageEnvelope.Meta.FilterRanges["month"] != (crud.NumericFilterRange{Minimum: "1", Maximum: "12"}) || pageEnvelope.Meta.FilterRanges["amount_cents"] != (crud.NumericFilterRange{Minimum: "100", Maximum: "600"}) {
+		t.Fatalf("numeric filter ranges = %#v", pageEnvelope.Meta.FilterRanges)
+	}
+	want := map[string]map[string]int64{
+		"1:[2025]":    {"documents": 4, "amount_cents": 1050},
+		"2:[2025,11]": {"documents": 3, "amount_cents": 650},
+	}
+	got := make(map[string]map[string]int64, len(pageEnvelope.Meta.Report.Subtotals))
+	for _, subtotal := range pageEnvelope.Meta.Report.Subtotals {
+		keyBytes, _ := json.Marshal(subtotal.Values)
+		key := fmt.Sprintf("%d:%s", subtotal.Level, keyBytes)
+		got[key] = make(map[string]int64, len(subtotal.Measures))
+		for _, measure := range subtotal.Measures {
+			got[key][measure.Key] = reportInteger(t, measure.Key, measure.Value)
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("grouped report subtotals = %#v, want %#v", got, want)
+	}
+
+	// 3. Os mesmos níveis respeitam os filtros: somente janeiro de 2026.
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/crud/"+demoGroupedReportTable+"/records?page=1&size=2&filter.year.eq=2026", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("filtered grouped report list = %d: %s", response.Code, response.Body.String())
+	}
+	var filteredEnvelope struct {
+		Meta struct {
+			Total  uint64             `json:"total"`
+			Report crud.ReportSummary `json:"report"`
+		} `json:"meta"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &filteredEnvelope); err != nil {
+		t.Fatal(err)
+	}
+	if filteredEnvelope.Meta.Total != 2 || len(filteredEnvelope.Meta.Report.Subtotals) != 2 {
+		t.Fatalf("filtered grouped report = %#v", filteredEnvelope.Meta)
+	}
+	for _, subtotal := range filteredEnvelope.Meta.Report.Subtotals {
+		if reportInteger(t, subtotal.Measures[0].Key, subtotal.Measures[0].Value) != 2 || reportInteger(t, subtotal.Measures[1].Key, subtotal.Measures[1].Value) != 1100 {
+			t.Fatalf("filtered subtotal = %#v", subtotal)
+		}
+	}
+}
+
+func reportInteger(t *testing.T, key string, value crud.Value) int64 {
+	t.Helper()
+	switch number := value.(type) {
+	case int64:
+		return number
+	case string:
+		integer, err := strconv.ParseInt(number, 10, 64)
+		if err != nil {
+			t.Fatalf("measure %s string is not an integer: %q", key, number)
+		}
+		return integer
+	case float64: // JSON decoding into interface{} uses float64 for integer values.
+		return int64(number)
+	default:
+		t.Fatalf("measure %s value has type %T", key, value)
+		return 0
 	}
 }
 

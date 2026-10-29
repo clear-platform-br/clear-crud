@@ -102,6 +102,8 @@ func (source *ReadModelSource) Capabilities(context.Context) crud.Capabilities {
 		crud.CapabilityTotalCount:     {},
 		crud.CapabilityOffsetPage:     {},
 		crud.CapabilityContainsSearch: {},
+		crud.CapabilityGroupedReport:  {},
+		crud.CapabilityNumericRanges:  {},
 	}
 }
 

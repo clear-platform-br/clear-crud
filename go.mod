@@ -1,6 +1,6 @@
 module github.com/clear-platform-br/clear-crud
 
-go 1.26.6
+go 1.26.10
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect

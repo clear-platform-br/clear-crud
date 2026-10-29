@@ -262,8 +262,16 @@ tentativa de gravá-lo.
 
 ### Padrão dos exemplos de definição
 
-Os exemplos do demo seguem deliberadamente a mesma sequência de comentários,
-para que um CRUD novo possa ser construído por repetição do padrão:
+Os exemplos Go do demo são uma coleção de receitas curtas, não implementações
+paralelas do CRUD. O arquivo canônico e executável é
+[`cmd/clear-crud-demo/definitions.go`](../cmd/clear-crud-demo/definitions.go);
+os trechos apresentados sob “Definição Go” na página são excertos de leitura em
+[`definitionSnippets.ts`](../demo/web/src/definitionSnippets.ts). Ao alterar um
+exemplo, mantenha os dois coerentes e não trate o trecho de interface como uma
+segunda fonte executável.
+
+Os comentários seguem sempre a mesma sequência, para que um CRUD novo possa
+ser construído por repetição do padrão:
 
 1. tabela física e chave pública do recurso;
 2. opções, validações, defaults e política de exclusão;
@@ -272,8 +280,40 @@ para que um CRUD novo possa ser construído por repetição do padrão:
 5. projeção e ordem do formulário;
 6. registro final no adapter/registry.
 
-Os comentários explicam a intenção de cada bloco; não substituem a definição
-nem introduzem regra especial no demo, no core ou no renderer.
+Cada comentário deve dizer, na etapa correspondente, o propósito da declaração,
+o comportamento resultante e um limite relevante (por exemplo, diferença entre
+valor persistido e label, filtro fixo e escolha do operador, ou regra do pai e
+filtro de opções). Não comentar linha a linha quando o bloco tiver uma intenção
+única. Os exemplos explicam o que o consumidor declara e o que fica a cargo do
+core, adapter ou renderer; não substituem a definição nem introduzem regra
+especial no demo, no core ou no renderer.
+
+#### Índice dos smokes e da receita Go
+
+| Exemplo mostrado no demo | Função/declaração canônica | O que ensina |
+| --- | --- | --- |
+| Smoke 01 | `registerDefinitions` — `RegisterAutoTenantTable` sem opções | Caso mínimo por convenção; schema inferido pelo adapter e escopo tenant do host. |
+| Smoke 02 | `registerDefinitions` — chave lógica, página e `WithEnum` | Reuso da tabela física; valor persistido distinto do label localizável. |
+| Smoke extra 01 | `registerDefinitions` — `WithDefault` | Default visível/aplicado na criação omitida, nunca na atualização. |
+| Smoke extra 02 | `registerDefinitions` — `WithPattern` | Validação RE2 server-side com mensagem localizável, sem transformação. |
+| Smoke extra 03 | `registerDefinitions` — `WithGridColumns` e `WithFormFields` | Ordem/projeção de colunas separada do schema e da ordenação das linhas. |
+| Smoke 03 | `registerDefinitions` — archive e enum na tabela descartável | Archive explícito, campo de negócio booleano e projeções independentes. |
+| Smoke 04 | `registerEnumControlsDemo` | Vocabulários e controles de enum; hard delete é exceção explícita. |
+| Smoke 05 | `registerReferenceLookupDemo` | Lookups raiz e dependentes em recursos globais registrados. |
+| Smoke 06 | `registerReferenceLookupDemo` — `FixedFilters` de `kind` | Partição fixa server-owned; uma opção é igualdade, várias são `IN`. |
+| Smoke 07 | `registerAuxiliaryCatalogDemo` | Relação pai/filhos, slots fixos e `FieldMetadata`, sem regra TdT no core. |
+| Smoke 08 | `registerAuxiliaryCatalogLookupDemo` com IDs `10` e `20` | União intencional de dois catálogos; apenas itens ativos. |
+| Smoke 09 | `registerAuxiliaryChannelLookupDemo` com ID `30` | Lookup de um único catálogo; não é seletor de catálogo. |
+| Smoke 10 | `registerReferenceReadModelDemo` | Join/cálculo server-owned, campos somente leitura e escopo tenant. |
+| Smoke 11 | `registerAuxiliaryDetailLookupDemo` | Lookup exibido dentro de filho `detail-only`; acesso ao pai e filtro de opções são regras distintas. |
+| Smoke 12 | `registerGroupedReportDemo` | Níveis e medidas declarados; adapter SQL agrupa/totaliza no escopo e filtros. |
+
+Leia o comentário do bloco e depois acompanhe a definição inteira em
+`definitions.go`: um excerto pode omitir bootstrap, campos auxiliares ou
+registro que já aparece no smoke anterior. Em especial, `FixedFilters` é
+server-owned; a lista de IDs não representa seleção do usuário, e vários IDs
+formam uma união. No Smoke 12, a query estática é do adapter de demonstração;
+não deve ser movida ao navegador ou ao core.
 
 O navegador nunca envia SQL, tabela, coluna ou regra de join. O core apenas
 valida a allowlist de campos, filtros e ordenação já registrada; a tradução da
@@ -285,11 +325,10 @@ Outros adapters devem publicar uma capability equivalente antes de um produto
 depender dela. Não simule o recurso no produto com um CRUD local nem mova a
 consulta para o core.
 
-Modelos de leitura também não são uma capability de relatório: eles retornam
-linhas e podem trazer joins ou cálculos escalares. Agrupamentos, somas,
-subtotais e total geral exigem uma capability agregada própria, com medidas e
-grupos declarados pelo servidor e execução no adapter. Nunca aceite `GROUP BY`,
-expressões ou SQL enviados pelo navegador.
+Modelos de leitura retornam linhas e podem trazer joins ou cálculos escalares.
+Para quebras e subtotais básicos, use `Grid.Report` conforme a seção abaixo;
+total geral e outras medidas ainda não estão disponíveis. Nunca aceite
+`GROUP BY`, expressões ou SQL enviados pelo navegador.
 
 A configuração automática nunca decide silenciosamente segurança. O host deve
 resolver, por perfil, os gates `open`, `read`, `write`, `soft_delete` e
@@ -493,8 +532,17 @@ envia `q` para uma busca textual global; o painel `Filtros` deriva um controle
 de cada coluna pública da grade e envia `Query.Filters` tipados. Booleanos usam
 `Todos`, `Sim` e `Não`; enums usam `Todos` e as opções declaradas. O adapter
 recebe sempre o valor canônico persistido (`review`), nunca o label traduzido
-(`Em análise`). Texto e lookup usam `contains`; números, datas e datetime usam
-igualdade; a validação final da allowlist e do tipo continua no servidor.
+(`Em análise`). Texto e lookup usam `contains`; datas e datetime usam igualdade;
+campos inteiros e decimais usam a faixa “De/Até”. A validação final da
+allowlist e do tipo continua no servidor. Para os campos numéricos, os
+extremos mínimo e máximo
+vêm do adapter para todos os registros no escopo confiável, não apenas da
+página aberta, e o renderer envia filtros inclusivos `gte`/`lte`. A SQL adapter
+calcula os limites com `MIN/MAX`, sem carregar todas as linhas para memória;
+os números trafegam como texto para preservar inteiros grandes e decimais. Se
+o adapter não fornecer os limites, os controles numéricos ficam desativados e
+informam essa indisponibilidade: o renderer não aceita uma faixa sem limites
+conhecidos.
 Quando mais de uma opção enum/boolean é marcada, o renderer envia uma única
 operação `in` com os valores canônicos: o resultado é “qualquer opção marcada”.
 
@@ -517,6 +565,49 @@ Joins, campos calculados e filtros que não possam ser expressos por campos,
 lookups e filtros allowlisted não devem ser colocados em `Grid.Columns`. Eles
 exigem uma projeção/read model registrada pelo servidor ou um caso de uso
 próprio; nunca uma query recebida do cliente.
+
+### Relatórios agrupados em níveis
+
+Quando a tela é um relatório de leitura, o consumidor pode declarar níveis e
+medidas em `Grid.Report`. O adapter calcula `count` e `sum` de campos inteiros
+no banco; o core valida allowlists, limites e valores retornados; o renderer
+somente encaixa os subtotais enviados pelo servidor entre as linhas. Nenhum
+cálculo agregado é repetido no navegador.
+
+```go
+Grid: crud.GridDefinition{
+    Columns: []crud.FieldKey{"year", "month", "document_name", "amount_cents"},
+    Sortable: []crud.FieldKey{"year", "month", "document_name", "amount_cents"},
+    Pagination: crud.PaginationDefinition{
+        Mode: crud.PageModeOffset, DefaultSize: 25,
+        AllowedSizes: []uint16{25, 50, 100}, Total: true,
+    },
+    Report: &crud.ReportDefinition{
+        Groups: []crud.ReportGroup{
+            {Field: "year", Direction: crud.SortAscending},
+            {Field: "month", Direction: crud.SortAscending},
+        },
+        Measures: []crud.ReportMeasure{
+            {Key: "documents", Label: "report.documents", Operation: crud.ReportCount},
+            {Key: "amount_cents", Label: "report.amount", Operation: crud.ReportSum, Field: "amount_cents"},
+        },
+    },
+}
+```
+
+Declare todos os campos de agrupamento como visíveis, não sensíveis e
+ordenáveis; a definição e o SQL são server-owned. O `sqladapter.RegisterReadModel`
+executa a agregação com o mesmo escopo, filtros e busca da página, mas calcula
+cada subtotal sobre o conjunto completo correspondente. A resposta contém
+somente os caminhos de agrupamento que aparecem naquela página, com limite de
+quatro níveis e oito medidas. Assim uma quebra de ano que continua na página
+seguinte repete o subtotal do ano completo, sem carregar todas as linhas nem
+fazer `GROUP BY` pedido pelo navegador. Use valores inteiros para somas, por
+exemplo centavos; para totais decimais ou operações adicionais, aguarde a
+extensão documentada do contrato. No HTTP os inteiros agregados são strings
+decimais exatas para impedir arredondamento no JavaScript; o client preserva
+esse valor para exibição. `Grid.Report` é somente leitura e requer um
+adapter que declare `CapabilityGroupedReport` e implemente `ReportDataSource`.
 
 Na geração automática, a ordenação usa o primeiro índice compatível com campos
 de negócio; prefixos técnicos de escopo podem antecedê-los no índice. Um índice

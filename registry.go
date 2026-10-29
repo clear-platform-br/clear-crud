@@ -150,6 +150,7 @@ func cloneDefinition(definition Definition) Definition {
 	clone.Grid.Searchable = append([]FieldKey(nil), definition.Grid.Searchable...)
 	clone.Grid.Sortable = append([]FieldKey(nil), definition.Grid.Sortable...)
 	clone.Grid.DefaultSort = append([]Sort(nil), definition.Grid.DefaultSort...)
+	clone.Grid.Report = cloneReportDefinition(definition.Grid.Report)
 	clone.Grid.Pagination.AllowedSizes = append([]uint16(nil), definition.Grid.Pagination.AllowedSizes...)
 	clone.Form.Fields = append([]FieldKey(nil), definition.Form.Fields...)
 	if len(definition.fieldPatterns) != 0 {

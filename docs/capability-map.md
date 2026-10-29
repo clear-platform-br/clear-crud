@@ -13,7 +13,7 @@ ou renderer, e `-` significa que ainda não deve ser usado.
 | Escopo | Recursos tenant-scoped ou global explícitos; chaves adicionais server-owned podem particionar uma visão via `Definition.Scope.Keys`/`ScopeColumns`; o navegador nunca escolhe tenant nem escopo confiável. |
 | Autorização | Permissão por ação e revalidação backend antes de leitura e mutação. |
 | Campos | Tipos escalares, required por default, `Optional`, defaults estáticos de criação inclusive em campos técnicos invisíveis, limites de tamanho/faixa, sensibilidade, somente leitura, `create_only`, padrões RE2 declarativos com mensagens localizáveis e presets públicos `crud.Pattern*` para formatos recorrentes. |
-| Grid | Projeção/ordem por `Grid.Columns`, busca textual global server-side e filtros automáticos por coluna via `Query.Filters`, ordenação determinística, paginação offset no HTTP atual e limite máximo de 100; no `AutoTable`, a ordem física do banco é preservada quando não há projeção explícita. Archive permanece `active_only` por default; `Grid.ArchiveVisibility` pode habilitar o toggle compacto `Excluídos`, com linhas arquivadas somente para leitura, selo `Excluído` na coluna de ações e faixa visual dedicada. |
+| Grid | Projeção/ordem por `Grid.Columns`, busca textual global server-side e filtros automáticos por coluna via `Query.Filters`, incluindo faixas numéricas limitadas aos extremos dos dados no escopo confiável; ordenação determinística, paginação offset no HTTP atual e limite máximo de 100; no `AutoTable`, a ordem física do banco é preservada quando não há projeção explícita. Archive permanece `active_only` por default; `Grid.ArchiveVisibility` pode habilitar o toggle compacto `Excluídos`, com linhas arquivadas somente para leitura, selo `Excluído` na coluna de ações e faixa visual dedicada. |
 | Form | `Form.Fields`, um campo por linha, defaults estáticos visíveis na inclusão, validação local e server-side, enum, booleano, lookup e resolução de metadados de campos filhos fixos por valores do pai; coleções filhas são exibidas como tabelas com edição focada por linha e ações declaradas. |
 | Mutação | Create/update/delete versionados, `UnitOfWork`, auditoria obrigatória e hooks tipados. |
 | Exclusão | Nenhuma ação por default; archive e hard delete somente por declaração explícita. |
@@ -41,6 +41,15 @@ server-owned da definição e sem aceitar coluna ou SQL do navegador. O renderer
 monta o painel automaticamente a partir das colunas públicas de `Grid.Columns`.
 Para enum/boolean, múltiplas marcações usam `filter.<campo>.in` repetido; o
 adapter traduz isso para pertencimento parametrizado.
+
+Para campos inteiros e decimais, a UI oferece os limites “De” e “Até”. Quando o
+adapter anuncia `CapabilityNumericRanges`, `meta.filterRanges` informa os
+extremos calculados sobre todos os registros daquele escopo (sem depender da
+página atual ou dos filtros ativos); o renderer impede valores fora deles e
+envia `gte`/`lte`. A implementação SQL executa uma única agregação `MIN/MAX`
+parametrizada e não carrega os registros para descobrir os limites. Sem esses
+metadados, o renderer desativa o filtro numérico e explica que os limites não
+estão disponíveis; não permite aplicar uma faixa sem bounds conhecidos.
 
 O campo `Buscar registros` continua sendo textual e não substitui um filtro
 semântico por coluna. Para um enum, ele pesquisa o valor persistido quando o
@@ -88,6 +97,18 @@ leitura. A consulta continua pertencendo ao adapter; ela não vira SQL no core
 nem parâmetro do navegador. Outros adapters devem fornecer a mesma capability
 sem alterar a definição do consumidor.
 
+### Relatórios agrupados
+
+`Grid.Report` declara até quatro níveis e oito medidas. A primeira versão
+suporta contagem de linhas e soma de campos inteiros. O adapter declara a
+capability, aplica o mesmo escopo/filtros/busca da listagem e calcula os
+subtotais no banco sobre o conjunto completo; devolve somente os caminhos que
+aparecem na página atual. O core valida a declaração e a resposta. O client
+Vue apenas intercala os resultados prontos às linhas, sem calcular medidas.
+O HTTP representa medidas inteiras como strings decimais exatas para evitar
+arredondamento no JavaScript. Paginação cursor, total geral e medidas
+adicionais ainda não são suportados.
+
 ## Ainda não disponível
 
 - equivalência de modelos de leitura registrados nos adapters PostgreSQL,
@@ -95,7 +116,8 @@ sem alterar a definição do consumidor.
 - predicado fixo server-owned para propagar política de um recurso pai a todas
   as leituras e mutações de uma rota filha independente; até existir capability
   genérica, não simular isso no consumidor;
-- relatórios agregados com agrupamento, medidas, subtotais e total geral;
+- equivalência de relatórios agrupados nos adapters além do read model SQL;
+- relatórios agregados com total geral e medidas adicionais (`avg`, `min`, `max`);
 - validadores declarativos de regex e transformações tipadas;
 - exportação CSV, seleção em massa e edição inline;
 - anexos, imagens, documentos, miniaturas e URLs temporárias;

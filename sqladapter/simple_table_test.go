@@ -81,6 +81,71 @@ func TestSimpleTableArchiveMetadataNormalizesConventionalValues(t *testing.T) {
 	}
 }
 
+func TestSimpleTableNumericFilterRangesAreScopedAndRespectArchiveVisibility(t *testing.T) {
+	database, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	_, err = database.Exec(`CREATE TABLE numeric_rows (
+		id INTEGER PRIMARY KEY, version INTEGER NOT NULL, tenant_id TEXT NOT NULL,
+		archived INTEGER NOT NULL DEFAULT 0, year INTEGER, amount NUMERIC
+	);
+	INSERT INTO numeric_rows VALUES (1, 1, 'tenant-a', 0, 1969, 100.00);
+	INSERT INTO numeric_rows VALUES (2, 1, 'tenant-a', 0, 2003, 1000000.00);
+	INSERT INTO numeric_rows VALUES (3, 1, 'tenant-a', 1, 2020, 9000000.00);
+	INSERT INTO numeric_rows VALUES (4, 1, 'tenant-b', 0, 1900, 1.00);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive := mustIdentifier("archived")
+	source, err := NewSimpleTable(database, TableDefinition{
+		Table: "numeric_rows", IDColumn: "id", VersionColumn: "version", ScopeColumns: map[string]Identifier{"tenant_id": "tenant_id"},
+		ArchiveColumn: &archive, Fields: map[crud.FieldKey]Identifier{"year": "year", "amount": "amount"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields := []crud.FieldKey{"year", "amount"}
+	empty, err := source.NumericFilterRanges(context.Background(), crud.Scope{"tenant_id": "tenant-a"}, false, nil)
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("empty field range request = %#v, err %v", empty, err)
+	}
+	if _, err := source.NumericFilterRanges(context.Background(), crud.Scope{"tenant_id": "tenant-a"}, false, []crud.FieldKey{"unknown"}); err == nil {
+		t.Fatal("numeric range request accepted an unregistered field")
+	}
+	active, err := source.NumericFilterRanges(context.Background(), crud.Scope{"tenant_id": "tenant-a"}, false, fields)
+	if err != nil || active["year"] != (crud.NumericFilterRange{Minimum: "1969", Maximum: "2003"}) || active["amount"] != (crud.NumericFilterRange{Minimum: "100", Maximum: "1000000"}) {
+		t.Fatalf("active ranges = %#v, err %v", active, err)
+	}
+	includingArchived, err := source.NumericFilterRanges(context.Background(), crud.Scope{"tenant_id": "tenant-a"}, true, fields)
+	if err != nil || includingArchived["year"].Maximum != "2020" || includingArchived["amount"].Maximum != "9000000" {
+		t.Fatalf("archived-visible ranges = %#v, err %v", includingArchived, err)
+	}
+}
+
+func TestNumericRangeStringPreservesSupportedNumericValues(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name  string
+		value any
+		want  string
+	}{
+		{name: "int64", value: int64(-7), want: "-7"},
+		{name: "int", value: 12, want: "12"},
+		{name: "float64", value: float64(1000000), want: "1000000"},
+		{name: "float32 decimal", value: float32(1.25), want: "1.25"},
+		{name: "database bytes", value: []byte("42.50"), want: "42.50"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := numericRangeString(test.value); got != test.want {
+				t.Fatalf("numericRangeString(%#v) = %q, want %q", test.value, got, test.want)
+			}
+		})
+	}
+}
+
 func TestNewSimpleTableRejectsInvalidConfig(t *testing.T) {
 	database, err := sql.Open("sqlite", ":memory:")
 	if err != nil {

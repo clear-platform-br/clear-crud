@@ -482,10 +482,34 @@ func (handler *Handler) ok(w http.ResponseWriter, r *http.Request, status int, d
 		if page.NextCursor != "" {
 			meta["nextCursor"] = page.NextCursor
 		}
+		if page.Report != nil {
+			meta["report"] = reportMetadata(page.Report)
+		}
+		if len(page.FilterRanges) > 0 {
+			meta["filterRanges"] = page.FilterRanges
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]any{"data": data, "meta": meta})
+}
+
+// reportMetadata serializes integer aggregates as decimal strings so browser
+// runtimes do not round large totals through IEEE-754 numbers.
+func reportMetadata(summary *crud.ReportSummary) map[string]any {
+	subtotals := make([]map[string]any, len(summary.Subtotals))
+	for index, subtotal := range summary.Subtotals {
+		measures := make([]map[string]any, len(subtotal.Measures))
+		for measureIndex, measure := range subtotal.Measures {
+			var value any
+			if integer, ok := measure.Value.(int64); ok {
+				value = strconv.FormatInt(integer, 10)
+			}
+			measures[measureIndex] = map[string]any{"key": measure.Key, "value": value}
+		}
+		subtotals[index] = map[string]any{"level": subtotal.Level, "values": subtotal.Values, "measures": measures}
+	}
+	return map[string]any{"subtotals": subtotals}
 }
 func (handler *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) {
 	var public *crud.Error

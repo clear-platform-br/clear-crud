@@ -138,6 +138,10 @@ ordem dos registros. No clear-crud, essas decisões ficam separadas:
   deriva os controles de `Grid.Columns`. Booleano envia `true`/`false`; enum
   envia o valor canônico, nunca o label traduzido. Controles enum/boolean
   aceitam múltiplas marcações e enviam `in` para a semântica “qualquer opção”.
+- `[x]` Filtros inteiros e decimais oferecem uma faixa inclusiva “De/Até”;
+  extremos mínimo/máximo são calculados pelo adapter no escopo confiável sobre
+  o conjunto completo, não apenas sobre a página atual. O renderer rejeita
+  valores fora dos limites e desativa o filtro quando o adapter não os fornece.
 - `[~]` Paginação offset/cursor no contrato; o core aceita ambos, mas o
   transporte HTTP/renderer atuais publicam apenas o fluxo offset.
 - `[x]` Tamanho padrão da página configurável pelo consumidor, com allowlist
@@ -148,10 +152,16 @@ ordem dos registros. No clear-crud, essas decisões ficam separadas:
   ainda pode gerar várias chamadas de transporte por página.
 - `[ ]` Adicionar valor de apresentação server-resolved para lookups e outros
   campos formatados, mantendo separado o valor persistido.
-- `[ ]` Definir capability separada de relatório agregado: agrupamentos,
-  medidas (`count`, `sum`, `avg`, `min`, `max`), subtotais e total geral, com
-  allowlist server-owned, escopo/tenant, filtros e execução no adapter; não
-  transformar o CRUD de linhas em um parser de `GROUP BY` recebido do cliente.
+- `[~]` Relatórios agrupados via `Grid.Report`: até quatro níveis e oito
+  medidas (`count`, `sum` de inteiro); `ReportDataSource` e a implementação
+  SQL calculam subtotais limitados aos caminhos visíveis na página, mas sobre
+  todo o conjunto com o mesmo escopo/filtros/busca. O core valida allowlists e
+  resultados e o Vue apenas exibe. Falta equivalência nos outros adapters,
+  total geral e medidas adicionais (`avg`, `min`, `max`); nunca aceitar
+  `GROUP BY` ou campos arbitrários do navegador.
+- `[x]` Comentar as definições Go de todos os smokes por etapas, explicando
+  propósito, efeito e limites de cada bloco; manter o índice no manual e os
+  excertos apresentados no demo coerentes com `definitions.go`.
 - `[ ]` Definir truncamento seguro de textos longos, sem perder acesso ao valor
   completo.
 - `[ ]` Cabeçalho fixo/repetição de cabeçalho somente se a tabela realmente

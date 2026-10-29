@@ -9,18 +9,20 @@ import (
 )
 
 // registerDefinitions is the complete, server-owned catalog of demo CRUDs.
-// Add each new resource as one focused register function; do not add routes,
-// handlers, or frontend controllers per resource.
-// Each example is commented in the same order: resource, rules, relationships,
-// projections and registration.
+// The numbered comments identify the corresponding smoke shown by the demo;
+// see demo/web/src/definitionSnippets.ts for the human-readable excerpts.
+// Each resource is registered here or in one focused helper. Do not add
+// resource-specific routes, handlers, or frontend controllers: the same public
+// definition, service, adapter and renderer contract serves every smoke.
 func registerDefinitions(ctx context.Context, database *sql.DB, registry *crud.Registry) error {
-	// 1. Tabela física: o adapter infere o contrato básico do schema.
+	// Smoke 01 — mínimo por convenção: o schema fornece metadados para o caso
+	// comum; o host ainda aplica o escopo tenant confiável.
 	if err := sqladapter.RegisterAutoTenantTable(ctx, database, registry, "clear_crud_minimal_demo_contacts"); err != nil {
 		return err
 	}
 
-	// 1. Tabela física e chave pública do recurso.
-	// 2. Paginação e opções traduzidas do campo status.
+	// Smoke 02 — a mesma tabela física com outra chave lógica, uma página menor
+	// e opções localizáveis para status. Os valores persistidos não mudam.
 	if err := sqladapter.RegisterAutoTenantTable(ctx, database, registry, "clear_crud_minimal_demo_contacts",
 		sqladapter.WithResourceKey("clear_crud_minimal_demo_contacts_ptbr"),
 		sqladapter.WithGridPageSize(10),
@@ -33,8 +35,8 @@ func registerDefinitions(ctx context.Context, database *sql.DB, registry *crud.R
 		return err
 	}
 
-	// 1. Tabela física e chave pública do recurso.
-	// 2. Defaults aplicados pelo servidor na criação.
+	// Smoke extra 01 — defaults escalares aparecem na inclusão e são aplicados
+	// pelo core se omitidos; atualização não repõe os defaults.
 	if err := sqladapter.RegisterAutoTenantTable(ctx, database, registry, "clear_crud_minimal_demo_contacts",
 		sqladapter.WithResourceKey("clear_crud_minimal_demo_contacts_defaults"),
 		sqladapter.WithDefault("status", "new"),
@@ -43,9 +45,8 @@ func registerDefinitions(ctx context.Context, database *sql.DB, registry *crud.R
 		return err
 	}
 
-	// 1. Tabela física e chave pública do recurso.
-	// 2. Validação declarativa: o nome precisa começar com letra maiúscula.
-	// 3. Projeções: mantenha o grid e o formulário nos campos automáticos.
+	// Smoke extra 02 — padrão RE2 server-owned para name, com mensagem
+	// localizável. O servidor valida criação/edição; não transforma o valor.
 	if err := sqladapter.RegisterAutoTenantTable(ctx, database, registry, "clear_crud_minimal_demo_contacts",
 		sqladapter.WithResourceKey("clear_crud_minimal_demo_contacts_pattern"),
 		sqladapter.WithPattern("name", crud.PatternFirstLetterUpper, "crud.validation.name_uppercase"),
@@ -53,8 +54,8 @@ func registerDefinitions(ctx context.Context, database *sql.DB, registry *crud.R
 		return err
 	}
 
-	// 1. Tabela física e chave pública do recurso.
-	// 2. Projeções explícitas para grid e formulário.
+	// Smoke extra 03 — a ordem explícita da grade e do formulário é independente
+	// da ordem física no schema e da ordenação das linhas.
 	if err := sqladapter.RegisterAutoTenantTable(ctx, database, registry, "clear_crud_minimal_demo_contacts",
 		sqladapter.WithResourceKey("clear_crud_minimal_demo_contacts_ordered"),
 		sqladapter.WithGridColumns("status", "name", "enabled", "notes"),
@@ -63,26 +64,32 @@ func registerDefinitions(ctx context.Context, database *sql.DB, registry *crud.R
 		return err
 	}
 
-	// 1. Tabela física e tamanho da página.
-	// 2. Opções e controles visuais dos campos enum.
+	// Smoke 04 — quatro enums com valores e controles distintos; inclui hard
+	// delete explicitamente para demonstrar que exclusão física nunca é default.
 	if err := registerEnumControlsDemo(ctx, database, registry); err != nil {
 		return err
 	}
 
-	// 1. Fontes dos lookups, filtros fixos e catálogos auxiliares.
+	// Smokes 05–09 e 11 — registra fontes e consumidores de lookup, dependências,
+	// catálogos auxiliares e relações detail-only em recursos fechados no servidor.
 	if err := registerReferenceCatalogDemo(ctx, database, registry); err != nil {
 		return err
 	}
 
-	// 1. Modelo de leitura com join, cálculo e campos somente leitura.
+	// Smoke 10 — read model server-owned com join e cálculos somente leitura.
 	if err := registerReferenceReadModelDemo(ctx, database, registry); err != nil {
 		return err
 	}
 
-	// 1. Tabela física e chave pública do recurso.
-	// 2. Arquivamento, paginação e regras de entrada.
-	// 3. Apresentação do booleano e opções do enum.
-	// 4. Projeções explícitas do grid e do formulário.
+	// Smoke 12 — declaração de quebras e medidas; o adapter SQL calcula os
+	// subtotais sobre todos os registros do escopo/filtros, não só a página.
+	if err := registerGroupedReportDemo(ctx, database, registry); err != nil {
+		return err
+	}
+
+	// Smoke 03 — archive explícito, enum, opções de entrada e projeções. O
+	// estado enabled é dado de negócio; archived controla a visibilidade de
+	// registros excluídos e não habilita restauração.
 	return sqladapter.RegisterAutoTenantTable(
 		ctx,
 		database,
@@ -120,24 +127,27 @@ func registerDefinitions(ctx context.Context, database *sql.DB, registry *crud.R
 }
 
 func registerReferenceCatalogDemo(ctx context.Context, database *sql.DB, registry *crud.Registry) error {
-	// 1. Fontes dos lookups: registre as tabelas como recursos globais.
+	// Smoke 05: lookups geográficos usam fontes globais, compartilhadas e
+	// somente leitura. O cadastro que referencia essas fontes continua tenant.
 	for _, table := range []sqladapter.Identifier{"clear_crud_reference_values", "clear_crud_reference_regions", "clear_crud_reference_cities"} {
 		if err := sqladapter.RegisterAutoGlobalTable(ctx, database, registry, table, sqladapter.WithGridPageSize(10)); err != nil {
 			return err
 		}
 	}
 
-	// 2. Tabela de Tabelas: registre o pai e seus itens.
+	// Smoke 07: pai e filhos ficam na mesma definição mestre-detalhe genérica;
+	// os campos de catálogo não criam rotas ou lógica especial no core.
 	if err := registerAuxiliaryCatalogDemo(ctx, database, registry); err != nil {
 		return err
 	}
 
-	// 3. Lookups: registre dependências e consumidores com filtros fixos.
+	// Smoke 05–06: declare lookups dependentes e um filtro fixo de kind.
 	if err := registerReferenceLookupDemo(ctx, database, registry); err != nil {
 		return err
 	}
 
-	// 4. Consumidores distintos: catálogo selecionável e canais ficam separados.
+	// Smoke 08 combina intencionalmente dois catálogos; Smoke 09 restringe a
+	// outro consumidor a um catálogo único. Não misture essas intenções.
 	if err := registerAuxiliaryCatalogLookupDemo(ctx, database, registry, "clear_crud_auxiliary_catalog_lookup_demo", "10", "20"); err != nil {
 		return err
 	}
@@ -145,19 +155,22 @@ func registerReferenceCatalogDemo(ctx context.Context, database *sql.DB, registr
 		return err
 	}
 
-	// 5. Smoke de lookup dentro de detalhe-only: o filho continua sem CRUD
-	// independente, mas expõe metadados e o lookup declarado para o renderer.
+	// Smoke 11: detail-only bloqueia acesso independente ao filho, mantendo
+	// metadados/lookup para apresentar o detalhe dentro do pai.
 	return registerAuxiliaryDetailLookupDemo(ctx, database, registry)
 }
 
 func registerAuxiliaryCatalogLookupDemo(ctx context.Context, database *sql.DB, registry *crud.Registry, resource crud.ResourceKey, catalogIDs ...string) error {
-	// 1. Filtro fixo: converta os IDs dos catálogos na operação IN.
+	// Smoke 08. Multi-catalog lookup: transformar os IDs recebidos em Values
+	// implementa uma união (IN). Um só ID é igualdade; vários são união, nunca
+	// um menu para o operador escolher qual catálogo consultar.
 	values := make([]crud.Value, len(catalogIDs))
 	for index, catalogID := range catalogIDs {
 		values[index] = catalogID
 	}
 
-	// 2. Lookup: declare a tabela fonte e suas colunas de valor/rótulo.
+	// O recurso-alvo, as colunas persistida/exibida e os filtros são declarados
+	// pelo servidor. A chamada HTTP não pode substituir nenhum deles.
 	return sqladapter.RegisterAutoTenantTable(ctx, database, registry, "clear_crud_auxiliary_catalog_lookup_demo",
 		sqladapter.WithResourceKey(resource),
 		sqladapter.WithGridPageSize(10),
@@ -166,7 +179,7 @@ func registerAuxiliaryCatalogLookupDemo(ctx context.Context, database *sql.DB, r
 			ValueField: "value_1",
 			LabelField: "value_2",
 			FixedFilters: []crud.FixedLookupFilter{
-				// Somente itens ativos dos catálogos selecionados são expostos.
+				// Somente itens ativos dos catálogos selecionados aparecem como opções.
 				{Field: "catalog_id", Values: values},
 				{Field: "active", Values: []crud.Value{true}},
 			},
@@ -179,7 +192,9 @@ func registerAuxiliaryCatalogLookupDemo(ctx context.Context, database *sql.DB, r
 }
 
 func registerAuxiliaryChannelLookupDemo(ctx context.Context, database *sql.DB, registry *crud.Registry) error {
-	// 1. Recurso consumidor: reutilize a tabela de itens, fixando o catálogo 30.
+	// Smoke 09. Reutiliza os registros de enum-controls, mas sob outra chave
+	// pública e com channel como lookup em vez de enum. catalog_id=30 restringe
+	// ao grupo Canais; active=true omite opções inativas.
 	return sqladapter.RegisterAutoTenantTable(ctx, database, registry, "clear_crud_enum_controls_demo",
 		sqladapter.WithResourceKey("clear_crud_auxiliary_catalog_channel_lookup_demo"),
 		sqladapter.WithGridPageSize(10),
@@ -188,7 +203,7 @@ func registerAuxiliaryChannelLookupDemo(ctx context.Context, database *sql.DB, r
 			ValueField: "value_1",
 			LabelField: "value_2",
 			FixedFilters: []crud.FixedLookupFilter{
-				// 2. Filtro fixo: somente opções ativas de canais.
+				// Valores de canal vêm de value_1; o operador vê value_2.
 				{Field: "catalog_id", Values: []crud.Value{"30"}},
 				{Field: "active", Values: []crud.Value{true}},
 			},
@@ -206,7 +221,8 @@ func registerAuxiliaryDetailLookupDemo(ctx context.Context, database *sql.DB, re
 		childResource  = crud.ResourceKey("clear_crud_auxiliary_catalog_detail_lookup_options")
 	)
 
-	// 1. Pai: reutilize a tabela física e publique somente o nome do catálogo.
+	// Smoke 11. Pai: sua grade e formulário só projetam title. O filho será
+	// carregado/manipulado como detalhe, e title também contextualiza seu modal.
 	catalogs, err := sqladapter.AutoTenantTable(
 		ctx,
 		database,
@@ -224,8 +240,8 @@ func registerAuxiliaryDetailLookupDemo(ctx context.Context, database *sql.DB, re
 		return err
 	}
 
-	// 2. Filho: a mesma tabela física recebe uma projeção de lookup.
-	//    O recurso é detail-only: só pode ser usado como detalhe do pai.
+	// Filho: a tabela física de opções é reutilizada com identidade própria,
+	// lookup declarado para value_1 e sem acesso independente (detail-only).
 	options, err := sqladapter.AutoTenantTable(
 		ctx,
 		database,
@@ -257,8 +273,10 @@ func registerAuxiliaryDetailLookupDemo(ctx context.Context, database *sql.DB, re
 		}
 	}
 
-	// 3. Relação: os labels vêm dos metadados do pai; o tipo lookup é
-	//    declarado pelo filho sem regra específica de catálogo no core.
+	// Relação: ParentAccess testa o valor confiável code do pai, enquanto
+	// FixedFilters restringe as opções do lookup. São controles distintos:
+	// autorização de abrir/manter a coleção versus seleção permitida no campo.
+	// FieldMetadata escolhe labels/requiredness dos slots fixos já existentes.
 	catalogs.Details = []crud.DetailDefinition{{
 		Key: "options", Resource: childResource, ParentField: "catalog_id", Maximum: 99,
 		AllowCreate: true, AllowUpdate: true, AllowDelete: true,
@@ -270,7 +288,8 @@ func registerAuxiliaryDetailLookupDemo(ctx context.Context, database *sql.DB, re
 	}}
 	catalogs.Presentation.TitleField = "title"
 
-	// 4. Registro: nenhum endpoint ou regra de catálogo é criado no demo.
+	// Registro: ambos continuam usando o caminho genérico registry/service/HTTP;
+	// nenhum endpoint ou regra específica de catálogo é introduzido.
 	if err := registry.Register(ctx, catalogs); err != nil {
 		return err
 	}
@@ -278,12 +297,13 @@ func registerAuxiliaryDetailLookupDemo(ctx context.Context, database *sql.DB, re
 }
 
 func registerAuxiliaryCatalogDemo(ctx context.Context, database *sql.DB, registry *crud.Registry) error {
-	// 1. Tabela pai: declare metadados, opções e campos apresentados ao usuário.
+	// Smoke 07. Pai: os metadados descrevem os slots dos itens. O grid apresenta
+	// apenas title; o formulário do dev mantém os campos de configuração.
 	catalogs, err := sqladapter.AutoTenantTable(
 		ctx,
 		database,
 		"clear_crud_auxiliary_catalogs",
-		// 1.1 Regras, ordenação e opções da tabela pai.
+		// 1.1 Comportamento da grade e vocabulários permitidos na configuração.
 		sqladapter.WithGridPageSize(10),
 		sqladapter.WithDefaultSort(
 			crud.Sort{Field: "active", Direction: crud.SortAscending},
@@ -292,7 +312,7 @@ func registerAuxiliaryCatalogDemo(ctx context.Context, database *sql.DB, registr
 		sqladapter.WithEnum("management", crud.Option{Value: "fixed", Label: "crud.catalog.management.fixed"}),
 		sqladapter.WithEnum("value_1_type", catalogValueTypeOptions()...),
 		sqladapter.WithEnum("value_2_type", catalogValueTypeOptions()...),
-		// 1.2 Projeções do grid e do formulário da tabela pai.
+		// 1.2 Separe a visão curta do grid do formulário completo do catálogo.
 		sqladapter.WithGridColumns("title"),
 		sqladapter.WithFormFields(
 			"title", "code", "management", "max_options", "active",
@@ -304,12 +324,13 @@ func registerAuxiliaryCatalogDemo(ctx context.Context, database *sql.DB, registr
 		return err
 	}
 
-	// 2. Tabela filha: declare itens e mantenha catalog_id interno.
+	// Filho: opções guardam os slots de valor; catalog_id é vínculo técnico do
+	// adapter, fica oculto e read-only para o operador.
 	options, err := sqladapter.AutoTenantTable(
 		ctx,
 		database,
 		"clear_crud_auxiliary_catalog_options",
-		// 2.1 Regras de paginação, exclusão e ordenação dos itens.
+		// 2.1 Limite de página, política de exclusão e ordem pai/ordem de item.
 		sqladapter.WithGridPageSize(10),
 		sqladapter.WithHardDelete(),
 		sqladapter.WithDefaultSort(
@@ -327,9 +348,10 @@ func registerAuxiliaryCatalogDemo(ctx context.Context, database *sql.DB, registr
 		}
 	}
 
-	// 3. Relação: conecte pai e filhos pelo contrato genérico de detalhes.
-	// 3.1 Metadados: os quatro slots continuam fixos no item; o catálogo só
-	// fornece labels, tipos e requiredness para os slots declarados.
+	// Relação: conecte pai e filho com ParentField; mutações do detalhe são parte
+	// da mutation do pai e ficam limitadas ao pai que o usuário abriu.
+	// FieldMetadata altera apresentação/validação dos slots declarados, não a
+	// estrutura: o filho continua tendo slots fixos mesmo se alguns forem ocultos.
 	catalogs.Details = []crud.DetailDefinition{{
 		Key: "options", Resource: options.Key, ParentField: "catalog_id", Maximum: 99,
 		AllowCreate: true, AllowUpdate: true, AllowDelete: true,
@@ -338,10 +360,10 @@ func registerAuxiliaryCatalogDemo(ctx context.Context, database *sql.DB, registr
 			{Field: "value_2", LabelField: "value_2_label", TypeField: "value_2_type", RequiredField: "value_2_required"},
 		},
 	}}
-	// 3.2 Contexto: mostre o nome da tabela pai ao editar seus itens.
+	// Contexto: title do registro pai nomeia o modal de seus itens.
 	catalogs.Presentation.TitleField = "title"
 
-	// 4. Registro: publique os dois recursos sem rota específica de catálogo.
+	// Registro: publique pai e filho no registry comum, sem endpoint ou motor TdT.
 	if err := registry.Register(ctx, catalogs); err != nil {
 		return err
 	}
@@ -352,12 +374,14 @@ func registerAuxiliaryCatalogDemo(ctx context.Context, database *sql.DB, registr
 }
 
 func catalogValueTypeOptions() []crud.Option {
-	// Metadados permitidos para os quatro campos livres do catálogo.
+	// Valores de metadados aceitos pelos slots configuráveis; o catálogo guarda
+	// tipos declarativos e o renderer resolve somente os tipos suportados.
 	return []crud.Option{{Value: "text", Label: "crud.catalog.type.text"}, {Value: "integer", Label: "crud.catalog.type.integer"}, {Value: "decimal", Label: "crud.catalog.type.decimal"}, {Value: "date", Label: "crud.catalog.type.date"}, {Value: "boolean", Label: "crud.catalog.type.boolean"}, {Value: "lookup", Label: "crud.catalog.type.lookup"}}
 }
 
 func registerReferenceLookupDemo(ctx context.Context, database *sql.DB, registry *crud.Registry) error {
-	// 1. Lookup raiz: declare estado e restrinja a kind=state.
+	// Smoke 05 (cadeia) e Smoke 06 (filtro fixo). O browser controla o valor
+	// escolhido pelo usuário, nunca o conjunto-base kind=state do primeiro lookup.
 	return sqladapter.RegisterAutoTenantTable(ctx, database, registry, "clear_crud_reference_lookup_demo",
 		sqladapter.WithGridPageSize(10),
 		sqladapter.WithLookup("state_id", crud.LookupDefinition{
@@ -367,20 +391,25 @@ func registerReferenceLookupDemo(ctx context.Context, database *sql.DB, registry
 			FixedFilters: []crud.FixedLookupFilter{{Field: "kind", Values: []crud.Value{"state"}}},
 			PageSize:     25,
 		}),
-		// 2. Lookups dependentes: o adapter fornece os valores anteriores.
+		// Região depende do estado e município depende da região; o serviço só
+		// consulta cada filho quando o ancestral necessário está presente.
 		sqladapter.WithLookup("region_id", crud.LookupDefinition{Resource: "clear_crud_reference_regions", ValueField: "id", LabelField: "name", Dependencies: []crud.FieldKey{"state_id"}, PageSize: 25}),
 		sqladapter.WithLookup("city_id", crud.LookupDefinition{Resource: "clear_crud_reference_cities", ValueField: "id", LabelField: "name", Dependencies: []crud.FieldKey{"region_id"}, PageSize: 25}),
-		// 3. Projeções: declare as colunas do grid e do formulário.
+		// IDs permanecem persistidos, mas o renderer resolve labels na grade e
+		// usa os mesmos recursos de referência no formulário.
 		sqladapter.WithGridColumns("name", "state_id", "region_id", "city_id"),
 		sqladapter.WithFormFields("name", "state_id", "region_id", "city_id"),
 	)
 }
 
 func registerReferenceReadModelDemo(ctx context.Context, database *sql.DB, registry *crud.Registry) error {
-	// 1. Projeção: mantenha uma lista ordenada para o grid somente leitura.
+	// Smoke 10. A consulta produz campos de origem, join e cálculo; esta lista
+	// decide sua ordem visual sem determinar a ordem das linhas.
 	columns := []crud.FieldKey{"name", "state_name", "summary", "calculated_number"}
 
-	// 2. Contrato: declare escopo, permissões e campos somente leitura.
+	// Contrato de leitura: as chaves/aliases têm tipos, escopo e permissão
+	// server-owned. ReadOnly impede que o client use os valores de join/cálculo
+	// para criar ou atualizar a tabela original.
 	definition := crud.Definition{
 		Contract: crud.ContractDefinitionV1,
 		Key:      "clear_crud_reference_read_model_demo",
@@ -409,8 +438,8 @@ func registerReferenceReadModelDemo(ctx context.Context, database *sql.DB, regis
 		Concurrency:  crud.ConcurrencyPolicy{Mode: crud.ConcurrencyNone},
 	}
 
-	// 3. Fonte: registre o SELECT server-owned; o adapter valida aliases,
-	// aplica escopo e expõe o resultado sem endpoints de mutação.
+	// Fonte: registre SELECT fixo no bootstrap. O adapter valida aliases e
+	// aplica o escopo tenant antes de listar; o navegador não envia SQL.
 	return sqladapter.RegisterReadModel(ctx, database, registry, definition, sqladapter.ReadModelConfig{
 		Query: `SELECT c.id AS id, c.tenant_id AS tenant_id, c.name AS name,
             s.name AS state_name, c.name || ' — ' || s.name AS summary,
@@ -422,12 +451,71 @@ func registerReferenceReadModelDemo(ctx context.Context, database *sql.DB, regis
 	})
 }
 
+func registerGroupedReportDemo(ctx context.Context, database *sql.DB, registry *crud.Registry) error {
+	// Smoke 12. Este recurso é um relatório imutável: campos, escopo, pesquisa,
+	// ordenação, paginação, níveis e medidas compõem uma allowlist server-owned.
+	// Os campos continuam declarados e tipados como em qualquer CRUD.
+	definition := crud.Definition{
+		Contract:    crud.ContractDefinitionV1,
+		Key:         "clear_crud_grouped_report_demo",
+		Labels:      crud.Labels{Title: "crud.clear_crud_grouped_report_demo.title", Singular: "crud.clear_crud_grouped_report_demo.singular"},
+		Scope:       crud.ScopeRequirements{Mode: crud.ScopeModeTenant, Keys: []string{"tenant_id"}},
+		Permissions: crud.Permissions{Read: "crud.clear_crud_grouped_report_demo.read"},
+		Fields: []crud.Field{
+			{Key: "year", Label: "crud.field.year", Type: crud.FieldInteger, Visible: true, ReadOnly: true},
+			{Key: "month", Label: "crud.field.month", Type: crud.FieldInteger, Visible: true, ReadOnly: true},
+			{Key: "document_name", Label: "crud.field.document_name", Type: crud.FieldString, Visible: true, ReadOnly: true},
+			{Key: "amount_cents", Label: "crud.field.amount_cents", Type: crud.FieldInteger, Visible: true, ReadOnly: true},
+		},
+		Grid: crud.GridDefinition{
+			Columns:     []crud.FieldKey{"year", "month", "document_name", "amount_cents"},
+			Searchable:  []crud.FieldKey{"document_name"},
+			Sortable:    []crud.FieldKey{"year", "month", "document_name", "amount_cents"},
+			DefaultSort: []crud.Sort{{Field: "document_name", Direction: crud.SortAscending}},
+			Pagination:  crud.PaginationDefinition{Mode: crud.PageModeOffset, DefaultSize: 10, AllowedSizes: []uint16{2, 10, 25}, Total: true},
+			Report: &crud.ReportDefinition{
+				Groups: []crud.ReportGroup{{Field: "year", Direction: crud.SortAscending}, {Field: "month", Direction: crud.SortAscending}},
+				Measures: []crud.ReportMeasure{
+					{Key: "documents", Label: "crud.report.documents", Operation: crud.ReportCount},
+					{Key: "amount_cents", Label: "crud.report.amount_cents", Operation: crud.ReportSum, Field: "amount_cents"},
+				},
+			},
+		},
+		Presentation: crud.Presentation{Collection: crud.CollectionTable, Density: crud.DensityComfortable},
+		Delete:       crud.DeletePolicy{Mode: crud.DeleteModeNone},
+		Concurrency:  crud.ConcurrencyPolicy{Mode: crud.ConcurrencyNone},
+	}
+
+	// Fonte SQL server-owned com linhas sintéticas no próprio SELECT. Assim o
+	// smoke não depende de migrations nem escreve no banco SQLite do demo. Os
+	// registros beta provam isolamento: não entram nas páginas nem nos totais do
+	// tenant alpha. Datas são decompostas em ano/mês pela fonte; o adapter agrupa.
+	return sqladapter.RegisterReadModel(ctx, database, registry, definition, sqladapter.ReadModelConfig{
+		Query: `WITH report_rows(id, tenant_id, document_date, document_name, amount_cents) AS (
+			SELECT 1, 'demo_tenant_alpha', '2025-11-01', 'Documento A', 100 UNION ALL
+			SELECT 2, 'demo_tenant_alpha', '2025-11-05', 'Documento B', 250 UNION ALL
+			SELECT 3, 'demo_tenant_alpha', '2025-11-20', 'Documento C', 300 UNION ALL
+			SELECT 4, 'demo_tenant_alpha', '2025-12-05', 'Documento D', 400 UNION ALL
+			SELECT 5, 'demo_tenant_alpha', '2026-01-03', 'Documento E', 500 UNION ALL
+			SELECT 6, 'demo_tenant_alpha', '2026-01-19', 'Documento F', 600 UNION ALL
+			SELECT 7, 'demo_tenant_beta', '2025-11-10', 'Documento de outro tenant', 90000
+		)
+		SELECT id, tenant_id, CAST(substr(document_date, 1, 4) AS INTEGER) AS year,
+			CAST(substr(document_date, 6, 2) AS INTEGER) AS month,
+			document_name, amount_cents FROM report_rows`,
+		IDColumn:   "id",
+		Searchable: []crud.FieldKey{"document_name"},
+	})
+}
+
 func registerEnumControlsDemo(ctx context.Context, database *sql.DB, registry *crud.Registry) error {
-	// 1. Tabela física e tamanho da página.
-	// 2. Opções e controles visuais dos campos enum.
+	// Smoke 04. O adapter infere os campos da tabela; a definição só acrescenta
+	// o tamanho da página e as exceções de apresentação abaixo.
 	return sqladapter.RegisterAutoTenantTable(ctx, database, registry, "clear_crud_enum_controls_demo",
 		sqladapter.WithResourceKey("clear_crud_enum_controls_demo"),
 		sqladapter.WithGridPageSize(10),
+		// Cada WithEnum declara valores canônicos permitidos e labels traduzíveis;
+		// o WithEnumControl seguinte escolhe apenas a apresentação no desktop.
 		sqladapter.WithEnum("priority",
 			crud.Option{Value: "low", Label: "crud.priority.low"},
 			crud.Option{Value: "medium", Label: "crud.priority.medium"},
@@ -452,7 +540,8 @@ func registerEnumControlsDemo(ctx context.Context, database *sql.DB, registry *c
 			crud.Option{Value: "urgent", Label: "crud.tone.urgent"},
 		),
 		sqladapter.WithEnumControl("tone", crud.EnumControlButtons),
-		// 3. Exclusão e projeções: escolha a política e ordene grid/formulário.
+		// Hard delete é irreversível e só aparece porque esta definição o pediu.
+		// Grid e Form compartilham estes cinco campos e a ordem indicada.
 		sqladapter.WithHardDelete(),
 		sqladapter.WithGridColumns("name", "priority", "channel", "state", "tone"),
 		sqladapter.WithFormFields("name", "priority", "channel", "state", "tone"),
