@@ -8,6 +8,134 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+func TestReadModelGroupedReportUsesFullScopedFilteredSet(t *testing.T) {
+	database := newAutoDatabase(t, `
+		CREATE TABLE report_rows (id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL, year INTEGER, month INTEGER, name TEXT NOT NULL, amount INTEGER);
+		INSERT INTO report_rows (id, tenant_id, year, month, name, amount) VALUES
+			(1, 'tenant-a', 2025, 11, 'A', 100),
+			(2, 'tenant-a', 2025, 11, 'B', 250),
+			(3, 'tenant-a', 2025, 11, 'C', 300),
+			(4, 'tenant-a', 2025, 12, 'D', 400),
+			(5, 'tenant-a', 2026, 1, 'E', 500),
+			(6, 'tenant-a', 2026, 1, 'F', 600),
+			(7, 'tenant-b', 2025, 11, 'Other tenant', 90000);
+	`)
+	config := ReadModelConfig{
+		Query:    `SELECT id, tenant_id, year, month, name AS document_name, amount AS amount_cents FROM report_rows`,
+		IDColumn: "id", ScopeColumns: map[string]Identifier{"tenant_id": "tenant_id"},
+		Fields:     map[crud.FieldKey]Identifier{"year": "year", "month": "month", "document_name": "document_name", "amount_cents": "amount_cents"},
+		Searchable: []crud.FieldKey{"document_name"},
+	}
+	source, err := NewReadModel(context.Background(), database, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ranges, err := source.NumericFilterRanges(context.Background(), crud.Scope{"tenant_id": "tenant-a"}, false, []crud.FieldKey{"year", "month", "amount_cents"})
+	if err != nil || ranges["year"] != (crud.NumericFilterRange{Minimum: "2025", Maximum: "2026"}) || ranges["month"] != (crud.NumericFilterRange{Minimum: "1", Maximum: "12"}) || ranges["amount_cents"] != (crud.NumericFilterRange{Minimum: "100", Maximum: "600"}) {
+		t.Fatalf("scoped read-model numeric ranges = %#v, err %v", ranges, err)
+	}
+	report := crud.ReportDefinition{
+		Groups:   []crud.ReportGroup{{Field: "year", Direction: crud.SortAscending}, {Field: "month", Direction: crud.SortAscending}},
+		Measures: []crud.ReportMeasure{{Key: "documents", Operation: crud.ReportCount}, {Key: "amount", Operation: crud.ReportSum, Field: "amount_cents"}},
+	}
+	query := crud.Query{Sort: []crud.Sort{{Field: "year", Direction: crud.SortAscending}, {Field: "month", Direction: crud.SortAscending}}, Page: crud.PageRequest{Mode: crud.PageModeOffset, Number: 1, Size: 2}}
+	page, err := source.ListReport(context.Background(), crud.Scope{"tenant_id": "tenant-a"}, query, report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Records) != 2 || page.Total == nil || *page.Total != 6 || page.Report == nil || len(page.Report.Subtotals) != 2 {
+		t.Fatalf("grouped report page = %#v", page)
+	}
+	if page.Report.Subtotals[0].Level != 1 || page.Report.Subtotals[0].Measures[0].Value != int64(4) || page.Report.Subtotals[0].Measures[1].Value != int64(1050) {
+		t.Fatalf("year subtotal = %#v", page.Report.Subtotals[0])
+	}
+	if page.Report.Subtotals[1].Level != 2 || page.Report.Subtotals[1].Measures[0].Value != int64(3) || page.Report.Subtotals[1].Measures[1].Value != int64(650) {
+		t.Fatalf("month subtotal = %#v", page.Report.Subtotals[1])
+	}
+
+	query.Filters = []crud.Filter{{Field: "year", Operator: crud.FilterEqual, Value: int64(2026)}}
+	filtered, err := source.ListReport(context.Background(), crud.Scope{"tenant_id": "tenant-a"}, query, report)
+	if err != nil || filtered.Total == nil || *filtered.Total != 2 || len(filtered.Report.Subtotals) != 2 {
+		t.Fatalf("filtered grouped report = %#v, %v", filtered, err)
+	}
+	for _, subtotal := range filtered.Report.Subtotals {
+		if subtotal.Measures[0].Value != int64(2) || subtotal.Measures[1].Value != int64(1100) {
+			t.Fatalf("filtered aggregate = %#v", subtotal)
+		}
+	}
+
+	emptyQuery := query
+	emptyQuery.Filters = []crud.Filter{{Field: "year", Operator: crud.FilterEqual, Value: int64(2040)}}
+	empty, err := source.ListReport(context.Background(), crud.Scope{"tenant_id": "tenant-a"}, emptyQuery, report)
+	if err != nil || empty.Report == nil || len(empty.Report.Subtotals) != 0 {
+		t.Fatalf("empty grouped report = %#v, %v", empty, err)
+	}
+}
+
+func TestReadModelGroupedReportRejectsInvalidRequestsAndPaths(t *testing.T) {
+	database := newAutoDatabase(t, `
+		CREATE TABLE report_rows (id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL, year INTEGER, amount INTEGER);
+		INSERT INTO report_rows (id, tenant_id, year, amount) VALUES (1, 'tenant-a', 2025, 10);
+	`)
+	source, err := NewReadModel(context.Background(), database, ReadModelConfig{
+		Query: `SELECT id, tenant_id, year, amount FROM report_rows`, IDColumn: "id",
+		ScopeColumns: map[string]Identifier{"tenant_id": "tenant_id"},
+		Fields:       map[crud.FieldKey]Identifier{"year": "year", "amount": "amount"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := crud.Query{Page: crud.PageRequest{Mode: crud.PageModeOffset, Number: 1, Size: 10}}
+	validReport := crud.ReportDefinition{Groups: []crud.ReportGroup{{Field: "year", Direction: crud.SortAscending}}, Measures: []crud.ReportMeasure{{Key: "count", Operation: crud.ReportCount}}}
+	for name, test := range map[string]struct {
+		source *ReadModelSource
+		query  crud.Query
+		report crud.ReportDefinition
+	}{
+		"nil source":    {nil, query, validReport},
+		"cursor":        {source, crud.Query{Page: crud.PageRequest{Mode: crud.PageModeCursor, Size: 10}}, validReport},
+		"no groups":     {source, query, crud.ReportDefinition{Measures: validReport.Measures}},
+		"bad group":     {source, query, crud.ReportDefinition{Groups: []crud.ReportGroup{{Field: "missing", Direction: crud.SortAscending}}, Measures: validReport.Measures}},
+		"bad sum field": {source, query, crud.ReportDefinition{Groups: validReport.Groups, Measures: []crud.ReportMeasure{{Key: "sum", Operation: crud.ReportSum, Field: "missing"}}}},
+		"bad operation": {source, query, crud.ReportDefinition{Groups: validReport.Groups, Measures: []crud.ReportMeasure{{Key: "unknown", Operation: "avg"}}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := test.source.ListReport(context.Background(), crud.Scope{"tenant_id": "tenant-a"}, test.query, test.report); err == nil {
+				t.Fatal("invalid grouped report request accepted")
+			}
+		})
+	}
+	if _, err := source.ListReport(context.Background(), crud.Scope{"tenant_id": ""}, query, validReport); codeOfReadModel(err) != crud.ErrorForbidden {
+		t.Fatalf("missing grouped report scope error = %v", err)
+	}
+
+	paths, err := visibleReportPaths([]crud.Record{{Fields: crud.Fields{"year": int64(2025)}}}, validReport, 1)
+	if err != nil || len(paths) != 1 || paths[0][0] != int64(2025) {
+		t.Fatalf("visible report paths = %#v, %v", paths, err)
+	}
+	if _, err := visibleReportPaths([]crud.Record{{Fields: crud.Fields{}}}, validReport, 1); err == nil {
+		t.Fatal("missing group field accepted")
+	}
+	if _, _, err := source.reportPathPredicate(nil, [][]crud.Value{{int64(2025)}}); err == nil {
+		t.Fatal("empty report path columns accepted")
+	}
+	if _, _, err := source.reportPathPredicate([]Identifier{"year"}, [][]crud.Value{{int64(2025), int64(2026)}}); err == nil {
+		t.Fatal("report path width mismatch accepted")
+	}
+	if _, _, err := source.reportPathPredicate([]Identifier{"year"}, [][]crud.Value{{float64(2025)}}); err == nil {
+		t.Fatal("unsupported report path value accepted")
+	}
+	predicate, arguments, err := source.reportPathPredicate([]Identifier{"year"}, [][]crud.Value{{nil}})
+	if err != nil || predicate != "(\"clear_crud_read_model\".\"year\" IS NULL)" || len(arguments) != 0 {
+		t.Fatalf("nullable report path = %q %#v, %v", predicate, arguments, err)
+	}
+	if !reportScalar("2025") || !reportScalar(true) || !reportScalar(int64(2025)) || reportScalar(float64(2025)) {
+		t.Fatal("report scalar allowlist is incorrect")
+	}
+}
+
+var _ crud.ReportDataSource = (*ReadModelSource)(nil)
+
 func TestReadModelJoinsAndCalculatesReadOnlyFields(t *testing.T) {
 	database := newAutoDatabase(t, `
         CREATE TABLE states (id INTEGER PRIMARY KEY, name TEXT NOT NULL);

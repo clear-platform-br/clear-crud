@@ -221,6 +221,7 @@ type GridDefinition struct {
 	DefaultSort       []Sort
 	Pagination        PaginationDefinition
 	ArchiveVisibility ArchiveVisibility `json:",omitempty"`
+	Report            *ReportDefinition `json:",omitempty"`
 }
 
 // FormDefinition describes the server-owned field projection and order of a

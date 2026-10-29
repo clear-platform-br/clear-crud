@@ -199,6 +199,9 @@ func validateGrid(grid GridDefinition, fields map[FieldKey]Field) error {
 			return invalidDefinition(fmt.Sprintf("grid.defaultSort[%d].direction", index), "is unknown")
 		}
 	}
+	if err := validateReport(grid.Report, fields, sortable, grid.Pagination); err != nil {
+		return err
+	}
 	return validatePagination(grid.Pagination)
 }
 

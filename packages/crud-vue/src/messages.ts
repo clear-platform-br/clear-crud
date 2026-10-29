@@ -40,6 +40,11 @@ export interface CrudMessages {
   filters?: string
   filterHint?: string
   filterAll?: string
+  filterFrom?: string
+  filterTo?: string
+  filterRangeHint?: string
+  filterRangeInvalid?: string
+  filterRangeUnavailable?: string
   applyFilters?: string
   clearFilters?: string
   booleanTrue?: string
@@ -59,7 +64,7 @@ export const ptBR: CrudMessages = {
   addItem: 'Adicionar item', removeItem: 'Remover item', required: 'Obrigatório.', validation: 'Revise os campos destacados.',
   saved: 'Alterações salvas.', removed: 'Registro removido.', unavailable: 'Não foi possível concluir a ação agora.', deleteRestricted: 'Não é possível apagar: existem registros dependentes ou a política não permite.', cardinality: 'A quantidade de itens não é válida.',
   invalid: 'Valor inválido.', pattern: 'O formato informado não é permitido.', length: 'O tamanho informado não é permitido.', range: 'O valor está fora do limite permitido.',
-  lightMode: 'Usar modo claro', darkMode: 'Usar modo escuro', compactDensity: 'Usar linhas densas', comfortableDensity: 'Usar linhas confortáveis', includeArchived: 'Excluídos', includeArchivedHelp: 'Incluir registros excluídos', archived: 'Excluído', filters: 'Filtros', filterHint: 'Filtre cada coluna sem alterar a definição.', filterAll: 'Todos', applyFilters: 'Aplicar filtros', clearFilters: 'Limpar filtros', booleanTrue: 'Sim', booleanFalse: 'Não', selectOption: 'Selecione…', lookupOptions: 'Abrir opções', lookupDependencyRequired: 'Escolha uma opção primeiro.', lookupNoOptions: 'Nenhuma opção disponível.', lookupSearchHint: 'A lista inicial mostra até {size} opções. Digite para buscar outras.', lookupSearchMinimum: 'Digite pelo menos {size} caracteres para pesquisar.',
+  lightMode: 'Usar modo claro', darkMode: 'Usar modo escuro', compactDensity: 'Usar linhas densas', comfortableDensity: 'Usar linhas confortáveis', includeArchived: 'Excluídos', includeArchivedHelp: 'Incluir registros excluídos', archived: 'Excluído', filters: 'Filtros', filterHint: 'Filtre cada coluna sem alterar a definição.', filterAll: 'Todos', filterFrom: 'De', filterTo: 'Até', filterRangeHint: 'Valores disponíveis: {minimum} a {maximum}.', filterRangeInvalid: 'Use valores entre {minimum} e {maximum}.', filterRangeUnavailable: 'Limites numéricos indisponíveis; este filtro está desativado.', applyFilters: 'Aplicar filtros', clearFilters: 'Limpar filtros', booleanTrue: 'Sim', booleanFalse: 'Não', selectOption: 'Selecione…', lookupOptions: 'Abrir opções', lookupDependencyRequired: 'Escolha uma opção primeiro.', lookupNoOptions: 'Nenhuma opção disponível.', lookupSearchHint: 'A lista inicial mostra até {size} opções. Digite para buscar outras.', lookupSearchMinimum: 'Digite pelo menos {size} caracteres para pesquisar.',
 }
 
 export const enUS: CrudMessages = {
@@ -69,7 +74,7 @@ export const enUS: CrudMessages = {
   addItem: 'Add item', removeItem: 'Remove item', required: 'Required.', validation: 'Review the highlighted fields.',
   saved: 'Changes saved.', removed: 'Record removed.', unavailable: 'We could not complete this action now.', deleteRestricted: 'This record cannot be deleted because dependent records exist or policy disallows it.', cardinality: 'The number of items is invalid.',
   invalid: 'Invalid value.', pattern: 'The entered format is not allowed.', length: 'The entered length is not allowed.', range: 'The value is outside the allowed limit.',
-  lightMode: 'Use light mode', darkMode: 'Use dark mode', compactDensity: 'Use compact rows', comfortableDensity: 'Use comfortable rows', includeArchived: 'Deleted', includeArchivedHelp: 'Include deleted records', archived: 'Deleted', filters: 'Filters', filterHint: 'Filter each column without changing the definition.', filterAll: 'All', applyFilters: 'Apply filters', clearFilters: 'Clear filters', booleanTrue: 'Yes', booleanFalse: 'No', selectOption: 'Select…', lookupOptions: 'Open options', lookupDependencyRequired: 'Choose an option first.', lookupNoOptions: 'No options available.', lookupSearchHint: 'The initial list shows up to {size} options. Type to search for more.', lookupSearchMinimum: 'Type at least {size} characters to search.',
+  lightMode: 'Use light mode', darkMode: 'Use dark mode', compactDensity: 'Use compact rows', comfortableDensity: 'Use comfortable rows', includeArchived: 'Deleted', includeArchivedHelp: 'Include deleted records', archived: 'Deleted', filters: 'Filters', filterHint: 'Filter each column without changing the definition.', filterAll: 'All', filterFrom: 'From', filterTo: 'To', filterRangeHint: 'Available values: {minimum} to {maximum}.', filterRangeInvalid: 'Use values between {minimum} and {maximum}.', filterRangeUnavailable: 'Numeric limits are unavailable; this filter is disabled.', applyFilters: 'Apply filters', clearFilters: 'Clear filters', booleanTrue: 'Yes', booleanFalse: 'No', selectOption: 'Select…', lookupOptions: 'Open options', lookupDependencyRequired: 'Choose an option first.', lookupNoOptions: 'No options available.', lookupSearchHint: 'The initial list shows up to {size} options. Type to search for more.', lookupSearchMinimum: 'Type at least {size} characters to search.',
 }
 
 export type Translate = (message: string) => string

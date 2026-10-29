@@ -117,7 +117,52 @@ func (source *SimpleTable) Capabilities(context.Context) crud.Capabilities {
 		crud.CapabilityArchive:        {},
 		crud.CapabilityHardDelete:     {},
 		crud.CapabilityLookup:         {},
+		crud.CapabilityNumericRanges:  {},
 	}
+}
+
+// NumericFilterRanges returns the scoped minimum and maximum for declared
+// numeric fields in one aggregate query. Archived rows are included only when
+// the registered grid explicitly requested them.
+func (source *SimpleTable) NumericFilterRanges(ctx context.Context, scope crud.Scope, includeArchived bool, fields []crud.FieldKey) (map[crud.FieldKey]crud.NumericFilterRange, error) {
+	ranges := make(map[crud.FieldKey]crud.NumericFilterRange, len(fields))
+	if len(fields) == 0 {
+		return ranges, nil
+	}
+	where, args, err := source.scopeWhere(scope)
+	if err != nil {
+		return nil, err
+	}
+	if !includeArchived {
+		activeWhere, activeArgs := source.activeWhere()
+		where += activeWhere
+		args = append(args, activeArgs...)
+	}
+	selectItems := make([]string, 0, len(fields)*2)
+	for _, key := range fields {
+		column, ok := source.table.Fields[key]
+		if !ok {
+			return nil, public(crud.ErrorInvalidRequest)
+		}
+		selectItems = append(selectItems, "MIN("+quote(column)+")", "MAX("+quote(column)+")")
+	}
+	statement := "SELECT " + strings.Join(selectItems, ", ") + " FROM " + quote(source.table.Table) + " WHERE " + where
+	values := make([]any, len(fields)*2)
+	destinations := make([]any, len(values))
+	for index := range values {
+		destinations[index] = &values[index]
+	}
+	if err := source.executor(ctx).QueryRowContext(ctx, statement, args...).Scan(destinations...); err != nil {
+		return nil, err
+	}
+	for index, key := range fields {
+		minimum, maximum := values[index*2], values[index*2+1]
+		if minimum == nil || maximum == nil {
+			continue
+		}
+		ranges[key] = crud.NumericFilterRange{Minimum: numericRangeString(minimum), Maximum: numericRangeString(maximum)}
+	}
+	return ranges, nil
 }
 
 // Within starts a transaction and makes it available to source operations
@@ -933,4 +978,19 @@ func sqlValue(value any) any {
 		return string(bytes)
 	}
 	return value
+}
+
+func numericRangeString(value any) string {
+	switch number := value.(type) {
+	case int64:
+		return strconv.FormatInt(number, 10)
+	case int:
+		return strconv.Itoa(number)
+	case float64:
+		return strconv.FormatFloat(number, 'f', -1, 64)
+	case float32:
+		return strconv.FormatFloat(float64(number), 'f', -1, 32)
+	default:
+		return stringValue(value)
+	}
 }

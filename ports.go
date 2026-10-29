@@ -51,11 +51,27 @@ type Query struct {
 
 // Page is a paginated result returned by a DataSource.
 type Page struct {
-	Records    []Record
-	NextCursor string
-	Page       uint64
-	Size       uint16
-	Total      *uint64
+	Records      []Record
+	NextCursor   string
+	Page         uint64
+	Size         uint16
+	Total        *uint64
+	Report       *ReportSummary                  `json:",omitempty"`
+	FilterRanges map[FieldKey]NumericFilterRange `json:"filterRanges,omitempty"`
+}
+
+// NumericFilterRange exposes the scoped data bounds for one numeric grid field.
+// Bounds are decimal strings so transports do not lose integer or decimal precision.
+type NumericFilterRange struct {
+	Minimum string `json:"minimum"`
+	Maximum string `json:"maximum"`
+}
+
+// NumericFilterRangeSource supplies scoped bounds for registered numeric fields.
+// Fields are selected by Service from the public grid definition; clients cannot
+// choose physical columns.
+type NumericFilterRangeSource interface {
+	NumericFilterRanges(context.Context, Scope, bool, []FieldKey) (map[FieldKey]NumericFilterRange, error)
 }
 
 // LookupQuery is the normalized request for a lookup field.

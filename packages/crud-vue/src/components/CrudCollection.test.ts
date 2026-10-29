@@ -85,4 +85,36 @@ describe('CrudCollection', () => {
     expect(wrapper.find('[data-clear-crud-action="edit"]').exists()).toBe(false)
     expect(wrapper.find('[data-clear-crud-action="delete"]').exists()).toBe(false)
   })
+
+  it('renders server-computed report subtotals and hides group keys from record columns', () => {
+    const reportDefinition: PublicDefinition = {
+      ...definition,
+      Fields: [
+        ...definition.Fields,
+        { Key: 'year', Label: 'report.year', Type: 'integer', Required: true, ReadOnly: true, Visible: true, Sensitive: false },
+        { Key: 'month', Label: 'report.month', Type: 'integer', Required: true, ReadOnly: true, Visible: true, Sensitive: false },
+      ],
+      Grid: {
+        ...definition.Grid,
+        Columns: ['year', 'month', 'name'],
+        Report: {
+          Groups: [{ Field: 'year', Direction: 'asc' }, { Field: 'month', Direction: 'asc' }],
+          Measures: [{ Key: 'count', Label: 'report.count', Operation: 'count' }],
+        },
+      },
+    }
+    const report = { Subtotals: [
+      { Level: 1, Values: [2025], Measures: [{ Key: 'count', Value: '4' }] },
+      { Level: 2, Values: [2025, 11], Measures: [{ Key: 'count', Value: '3' }] },
+    ] }
+    const translate = (code: string) => ({ 'report.year': 'Ano', 'report.month': 'Mês', 'report.count': 'Registros' }[code] ?? code)
+    const wrapper = mount(CrudCollection, { props: {
+      definition: reportDefinition,
+      records: [{ ID: '1', Version: 1, Fields: { year: 2025, month: 11, name: 'Documento A' } }, { ID: '2', Version: 1, Fields: { year: 2025, month: 11, name: 'Documento B' } }],
+      report, messages: ptBR, translate, loading: false,
+    } })
+    expect(wrapper.findAll('[data-clear-crud-report-level]').map((row) => row.text())).toEqual(['Ano: 2025Registros: 4', 'Mês: 11Registros: 3'])
+    expect(wrapper.findAll('[data-clear-crud-field="name"]')).toHaveLength(2)
+    expect(wrapper.find('[data-clear-crud-field="year"]').exists()).toBe(false)
+  })
 })

@@ -176,6 +176,19 @@ func validateDeletePolicy(definition Definition) error {
 }
 
 func validateCapabilities(definition Definition, capabilities Capabilities) error {
+	if definition.Grid.Report != nil {
+		if !capabilities.Has(CapabilityGroupedReport) {
+			return invalidDefinition("source.capabilities", "must support grouped reports")
+		}
+		if _, ok := definition.Source.(ReportDataSource); !ok {
+			return invalidDefinition("source", "must implement ReportDataSource")
+		}
+	}
+	if capabilities.Has(CapabilityNumericRanges) {
+		if _, ok := definition.Source.(NumericFilterRangeSource); !ok {
+			return invalidDefinition("source", "must implement NumericFilterRangeSource when numeric filter ranges are advertised")
+		}
+	}
 	if definition.Grid.ArchiveVisibility == ArchiveVisibilityActiveAndArchived && !capabilities.Has(CapabilityArchive) {
 		return invalidDefinition("source.capabilities", "must support archive visibility")
 	}

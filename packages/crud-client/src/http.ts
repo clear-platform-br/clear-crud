@@ -1,6 +1,6 @@
-import type { CrudRecord, CrudTransport, DetailFieldMetadataSource, Field, LookupOption, Mutation, Page, PublicDefinition, Query, Value } from './types.js'
+import type { CrudRecord, CrudTransport, DetailFieldMetadataSource, Field, LookupOption, Mutation, NumericFilterRange, Page, PublicDefinition, Query, ReportSummary, Value } from './types.js'
 
-interface Envelope<T> { data: T; meta?: { page?: number; size?: number; total?: number; nextCursor?: string } }
+interface Envelope<T> { data: T; meta?: { page?: number; size?: number; total?: number; nextCursor?: string; report?: unknown; filterRanges?: unknown } }
 interface ErrorEnvelope { error?: { code?: string; message?: string; fields?: Record<string, string>; correlationId?: string } }
 
 export class CrudRequestError extends Error {
@@ -55,6 +55,8 @@ export class HttpCrudClient implements CrudTransport {
       size: envelope.meta?.size ?? query.size ?? 25,
       total: envelope.meta?.total,
       nextCursor: envelope.meta?.nextCursor,
+      report: envelope.meta?.report === undefined ? undefined : normalizeReportSummary(envelope.meta.report),
+      ...(envelope.meta?.filterRanges === undefined ? {} : { filterRanges: normalizeFilterRanges(envelope.meta.filterRanges) }),
     }
   }
 
@@ -190,7 +192,19 @@ function normalizeLookup(value: unknown): Field['Lookup'] {
   return { Resource: String(raw.Resource ?? raw.resource ?? ''), ValueField: String(raw.ValueField ?? raw.valueField ?? ''), LabelField: String(raw.LabelField ?? raw.labelField ?? ''), Dependencies: asArray(raw.Dependencies ?? raw.dependencies).map(String), PageSize: Number(raw.PageSize ?? raw.pageSize ?? 25), MinSearchLength: positiveNumberOrUndefined(minSearchLength) ?? 3 }
 }
 function normalizeLabels(value: unknown): PublicDefinition['Labels'] { const raw = asObject(value); return { Title: String(raw.Title ?? raw.title ?? ''), Singular: String(raw.Singular ?? raw.singular ?? ''), Help: nonEmptyStringOrUndefined(raw.Help ?? raw.help) } }
-function normalizeGrid(value: unknown): PublicDefinition['Grid'] { const raw = asObject(value); const pagination = asObject(raw.Pagination ?? raw.pagination); const archiveVisibility = raw.ArchiveVisibility ?? raw.archiveVisibility; return { Columns: asArray(raw.Columns ?? raw.columns).map(String), Searchable: asArray(raw.Searchable ?? raw.searchable).map(String), Sortable: asArray(raw.Sortable ?? raw.sortable).map(String), DefaultSort: asArray(raw.DefaultSort ?? raw.defaultSort).map((sort) => { const item = asObject(sort); return { Field: String(item.Field ?? item.field ?? ''), Direction: String(item.Direction ?? item.direction ?? 'asc') as 'asc' | 'desc' } }), Pagination: { Mode: String(pagination.Mode ?? pagination.mode ?? 'offset') as 'offset' | 'cursor', DefaultSize: Number(pagination.DefaultSize ?? pagination.defaultSize ?? 25), AllowedSizes: asArray(pagination.AllowedSizes ?? pagination.allowedSizes).map(Number), Total: Boolean(pagination.Total ?? pagination.total) }, ArchiveVisibility: archiveVisibility === 'active_and_archived' ? 'active_and_archived' : 'active_only' } }
+function normalizeGrid(value: unknown): PublicDefinition['Grid'] { const raw = asObject(value); const pagination = asObject(raw.Pagination ?? raw.pagination); const archiveVisibility = raw.ArchiveVisibility ?? raw.archiveVisibility; const report = raw.Report ?? raw.report; return { Columns: asArray(raw.Columns ?? raw.columns).map(String), Searchable: asArray(raw.Searchable ?? raw.searchable).map(String), Sortable: asArray(raw.Sortable ?? raw.sortable).map(String), DefaultSort: asArray(raw.DefaultSort ?? raw.defaultSort).map((sort) => { const item = asObject(sort); return { Field: String(item.Field ?? item.field ?? ''), Direction: String(item.Direction ?? item.direction ?? 'asc') as 'asc' | 'desc' } }), Pagination: { Mode: String(pagination.Mode ?? pagination.mode ?? 'offset') as 'offset' | 'cursor', DefaultSize: Number(pagination.DefaultSize ?? pagination.defaultSize ?? 25), AllowedSizes: asArray(pagination.AllowedSizes ?? pagination.allowedSizes).map(Number), Total: Boolean(pagination.Total ?? pagination.total) }, ArchiveVisibility: archiveVisibility === 'active_and_archived' ? 'active_and_archived' : 'active_only', ...(report === undefined ? {} : { Report: normalizeReportDefinition(report) }) } }
+function normalizeReportDefinition(value: unknown): NonNullable<PublicDefinition['Grid']['Report']> { const raw = asObject(value); return { Groups: asArray(raw.Groups ?? raw.groups).map((group) => { const item = asObject(group); return { Field: String(item.Field ?? item.field ?? ''), Direction: String(item.Direction ?? item.direction ?? 'asc') as 'asc' | 'desc' } }), Measures: asArray(raw.Measures ?? raw.measures).map((measure) => { const item = asObject(measure); const field = item.Field ?? item.field; return { Key: String(item.Key ?? item.key ?? ''), Label: String(item.Label ?? item.label ?? ''), Operation: String(item.Operation ?? item.operation ?? 'count') as 'count' | 'sum', ...(typeof field === 'string' && field ? { Field: field } : {}) } }) } }
+function normalizeReportSummary(value: unknown): ReportSummary { const raw = asObject(value); return { Subtotals: asArray(raw.Subtotals ?? raw.subtotals).map((subtotal) => { const item = asObject(subtotal); return { Level: Number(item.Level ?? item.level ?? 0), Values: asArray(item.Values ?? item.values) as Value[], Measures: asArray(item.Measures ?? item.measures).map((measure) => { const entry = asObject(measure); const aggregate = entry.Value ?? entry.value; return { Key: String(entry.Key ?? entry.key ?? ''), Value: aggregate === null || aggregate === undefined ? null : String(aggregate) } }) } }) } }
+function normalizeFilterRanges(value: unknown): Record<string, NumericFilterRange> {
+  const raw = asObject(value)
+  return Object.fromEntries(Object.entries(raw).flatMap(([key, value]) => {
+    const range = asObject(value)
+    const minimum = range.minimum ?? range.Minimum
+    const maximum = range.maximum ?? range.Maximum
+    if (minimum === undefined || maximum === undefined || minimum === null || maximum === null) return []
+    return [[key, { minimum: String(minimum), maximum: String(maximum) }]]
+  }))
+}
 function normalizeForm(value: unknown): PublicDefinition['Form'] { const raw = asObject(value); return { Fields: asArray(raw.Fields ?? raw.fields).map(String) } }
 function normalizePresentation(value: unknown): PublicDefinition['Presentation'] { const raw = asObject(value); const titleField = raw.TitleField ?? raw.titleField; return { Collection: String(raw.Collection ?? raw.collection ?? 'auto') as PublicDefinition['Presentation']['Collection'], Density: String(raw.Density ?? raw.density ?? 'comfortable') as PublicDefinition['Presentation']['Density'], ...(typeof titleField === 'string' && titleField ? { TitleField: titleField } : {}) } }
 function normalizeDelete(value: unknown): PublicDefinition['Delete'] { const raw = asObject(value); const mode = raw.Mode ?? raw.mode; return mode === 'archive' || mode === 'hard_delete' || mode === 'none' ? { Mode: mode } : undefined }

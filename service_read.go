@@ -3,7 +3,9 @@ package crud
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -17,11 +19,77 @@ func (service *Service) List(ctx context.Context, key ResourceKey, query Query) 
 	if err != nil {
 		return Page{}, err
 	}
-	page, err := state.definition.Source.List(ctx, state.scope, normalized)
+	var page Page
+	if report := state.definition.Grid.Report; report != nil {
+		source := state.definition.Source.(ReportDataSource)
+		page, err = source.ListReport(ctx, state.scope, normalized, *report)
+	} else {
+		page, err = state.definition.Source.List(ctx, state.scope, normalized)
+	}
 	if err != nil {
 		return Page{}, unavailable(err)
 	}
+	if state.definition.Grid.Report != nil && !validReportPage(state.definition, page) {
+		return Page{}, unavailable(fmt.Errorf("report source returned an invalid page summary"))
+	}
+	if rangeSource, ok := state.definition.Source.(NumericFilterRangeSource); ok && state.definition.Source.Capabilities(ctx).Has(CapabilityNumericRanges) {
+		fields := numericGridFields(state.definition)
+		if len(fields) > 0 {
+			ranges, rangeErr := rangeSource.NumericFilterRanges(ctx, state.scope, normalized.IncludeArchived, fields)
+			if rangeErr != nil {
+				return Page{}, unavailable(rangeErr)
+			}
+			if !validNumericFilterRanges(state.definition, fields, ranges) {
+				return Page{}, unavailable(fmt.Errorf("numeric filter range source returned invalid bounds"))
+			}
+			page.FilterRanges = ranges
+		}
+	}
 	return sanitizePage(state.definition, page), nil
+}
+
+func numericGridFields(definition Definition) []FieldKey {
+	fields := make([]FieldKey, 0, len(definition.Grid.Columns))
+	for _, key := range definition.Grid.Columns {
+		field, ok := findField(definition.Fields, key)
+		if ok && !field.Sensitive && (field.Type == FieldInteger || field.Type == FieldDecimal) {
+			fields = append(fields, key)
+		}
+	}
+	return fields
+}
+
+func validNumericFilterRanges(definition Definition, expected []FieldKey, ranges map[FieldKey]NumericFilterRange) bool {
+	allowed := make(map[FieldKey]FieldType, len(expected))
+	for _, key := range expected {
+		field, ok := findField(definition.Fields, key)
+		if !ok || field.Sensitive || (field.Type != FieldInteger && field.Type != FieldDecimal) {
+			return false
+		}
+		allowed[key] = field.Type
+	}
+	for key, bounds := range ranges {
+		fieldType, ok := allowed[key]
+		if !ok || bounds.Minimum == "" || bounds.Maximum == "" {
+			return false
+		}
+		minimum, minOK := numericBound(bounds.Minimum, fieldType)
+		maximum, maxOK := numericBound(bounds.Maximum, fieldType)
+		if !minOK || !maxOK || minimum.Cmp(maximum) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func numericBound(value string, fieldType FieldType) (*big.Rat, bool) {
+	if fieldType == FieldInteger {
+		if _, err := strconv.ParseInt(value, 10, 64); err != nil {
+			return nil, false
+		}
+	}
+	parsed, ok := new(big.Rat).SetString(value)
+	return parsed, ok
 }
 
 // Get returns one scoped record. A record-specific authorization follows the
@@ -178,6 +246,9 @@ func normalizeQuery(ctx context.Context, definition Definition, query Query) (Qu
 	if err != nil {
 		return Query{}, err
 	}
+	if report := definition.Grid.Report; report != nil {
+		sort = reportSort(*report, sort)
+	}
 	normalized.Sort = sort
 	page, err := normalizePage(definition.Grid.Pagination, query.Page)
 	if err != nil {
@@ -185,6 +256,23 @@ func normalizeQuery(ctx context.Context, definition Definition, query Query) (Qu
 	}
 	normalized.Page = page
 	return normalized, nil
+}
+
+func reportSort(report ReportDefinition, requested []Sort) []Sort {
+	ordered := make([]Sort, 0, len(report.Groups)+len(requested))
+	seen := make(map[FieldKey]struct{}, len(report.Groups)+len(requested))
+	for _, group := range report.Groups {
+		ordered = append(ordered, Sort{Field: group.Field, Direction: group.Direction})
+		seen[group.Field] = struct{}{}
+	}
+	for _, term := range requested {
+		if _, exists := seen[term.Field]; exists {
+			continue
+		}
+		ordered = append(ordered, term)
+		seen[term.Field] = struct{}{}
+	}
+	return ordered
 }
 
 func normalizeSort(definition Definition, sort []Sort) ([]Sort, error) {
@@ -297,6 +385,20 @@ func sanitizePage(definition Definition, page Page) Page {
 		records[index] = sanitizeRecord(definition, record)
 	}
 	page.Records = records
+	if definition.Grid.Report == nil {
+		page.Report = nil
+	}
+	allowedRanges := make(map[FieldKey]struct{})
+	for _, field := range numericGridFields(definition) {
+		allowedRanges[field] = struct{}{}
+	}
+	filteredRanges := make(map[FieldKey]NumericFilterRange, len(page.FilterRanges))
+	for key := range page.FilterRanges {
+		if _, ok := allowedRanges[key]; ok {
+			filteredRanges[key] = page.FilterRanges[key]
+		}
+	}
+	page.FilterRanges = filteredRanges
 	return page
 }
 

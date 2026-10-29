@@ -57,6 +57,18 @@ Funcionalidade: fundação pública do Clear CRUD
     Quando o operador lista os registros sem escolher ordenação
     Então o datasource recebe a ordenação padrão seguida pelo identificador
 
+  Cenário: filtros numéricos respeitam os extremos reais do escopo
+    Dado um grid com campos inteiros e decimais e valores no escopo entre 1969 e 2003
+    Quando o adapter retorna os extremos numéricos do escopo confiável
+    Então o renderer limita “De” e “Até” a esses extremos e envia filtros inclusivos
+    E uma faixa fora dos extremos não pode ser aplicada
+
+  Cenário: filtro numérico falha fechado sem extremos do adapter
+    Dado um grid com campos inteiros ou decimais
+    Quando o adapter não fornece limites numéricos
+    Então os controles numéricos ficam desativados com explicação localizável
+    E nenhum valor numérico sem limites é aplicado
+
   Cenário: identificador malicioso não chega ao datasource
     Dado uma requisição com resource, campo ou ordenação fora da allowlist
     Quando o operador tenta consultar o CRUD

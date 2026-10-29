@@ -124,6 +124,8 @@ const (
 	CapabilityContainsSearch Capability = "contains_search"
 	CapabilityPrefixSearch   Capability = "prefix_search"
 	CapabilityLookup         Capability = "lookup"
+	CapabilityGroupedReport  Capability = "grouped_report"
+	CapabilityNumericRanges  Capability = "numeric_filter_ranges"
 )
 
 // Capabilities is a set of guarantees declared by a DataSource.
