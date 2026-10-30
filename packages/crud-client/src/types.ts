@@ -15,6 +15,18 @@ export interface ReportMeasure {
   Label: string
   Operation: ReportOperation
   Field?: string
+  NumericDisplay?: NumericDisplay
+}
+
+export interface NumericDisplay {
+  Locale: string
+  Currency?: string
+  /** Decimal places represented by an integer stored in minor units. */
+  Scale?: number
+  MinimumFractionDigits?: number
+  /** Optional consumer-provided unit text; applied only while rendering. */
+  Prefix?: string
+  Suffix?: string
 }
 
 export interface ReportDefinition {
@@ -56,6 +68,7 @@ export interface Field {
   Sensitive: boolean
   Default?: Value
   BooleanDisplay?: { True: string; False: string }
+  NumericDisplay?: NumericDisplay
   EnumControl?: EnumControl
   Pattern?: string
   PatternMessage?: string

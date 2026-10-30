@@ -204,6 +204,7 @@ body:has([data-clear-crud-theme="dark"]) { background: #15191e; }
 [data-clear-crud-boolean="false"] { color: var(--clear-crud-status-neutral); }
 .crud-table-row:last-child .crud-table-cell { border-bottom: 0; }
 .crud-row-actions { justify-content: end; }
+.crud-record-details-row > .crud-record-details-cell { padding: .75rem 1rem; border-bottom: 2px solid var(--clear-crud-border-emphasis); background: color-mix(in srgb, var(--clear-crud-action-primary) 5%, var(--clear-crud-surface-panel)); }
 .crud-empty, .crud-loading { color: var(--clear-crud-text-secondary); padding: var(--clear-crud-space-5); text-align: center; }
 
 /* 06. Pagination -------------------------------------------------------- */
@@ -287,6 +288,8 @@ body:has([data-clear-crud-theme="dark"]) { background: #15191e; }
   .crud-table-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .crud-table, .crud-table-body, .crud-table-row, .crud-table-cell { display: block; }
   .crud-table-row { padding: var(--clear-crud-space-3) var(--clear-crud-space-4); border-bottom: 1px solid var(--clear-crud-border-subtle); }
+  .crud-record-details-row { display: table-row; padding: 0; }
+  .crud-record-details-row > .crud-record-details-cell { display: table-cell; }
   .crud-report-group-row { display: table-row; padding: 0; }
   .crud-report-group-heading { display: table-cell; padding: var(--clear-crud-space-3) var(--clear-crud-space-4); }
   .crud-report-group-level-2 .crud-report-group-heading { padding-inline-start: 1.5rem; }

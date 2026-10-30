@@ -22,6 +22,18 @@ Funcionalidade: Renderer padrão de CRUD
     E a inclusão de um novo pai continua usando o título fixo da definição
     E a opção não altera escopo, autorização, mutation ou persistência
 
+  Cenário: Campo e subtotal formatam número sem converter o dado em texto
+    Dado que o consumidor declara locale, moeda e escala para um campo e sua medida
+    Quando a grade mostra o campo e o subtotal
+    Então ambos são localizados somente na apresentação
+    E os valores numéricos originais permanecem inalterados para contas e transporte
+
+  Cenário: Host abre detalhes sem conceder edição pelo renderer
+    Dado que o host declara um rótulo para a ação de detalhes
+    Quando o operador aciona detalhes em uma linha
+    Então o renderer emite somente o ID do registro ao host
+    E não emite uma mutation de inclusão, edição ou remoção
+
   Cenário: Ações simbólicas continuam acessíveis
     Dado que a lista apresenta registros editáveis e apagáveis
     Quando o operador usa teclado ou leitor de tela

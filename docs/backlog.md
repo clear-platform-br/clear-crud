@@ -146,6 +146,9 @@ ordem dos registros. No clear-crud, essas decisões ficam separadas:
   transporte HTTP/renderer atuais publicam apenas o fluxo offset.
 - `[x]` Tamanho padrão da página configurável pelo consumidor, com allowlist
   ordenada e limite máximo de 100 registros.
+- `[x]` Ocultar os controles de paginação quando o total conhecido couber em
+  uma página; preservar a navegação quando o total for desconhecido ou houver
+  mais páginas.
 - `[x]` Ordenação determinística e validação contra índices no adapter.
 - `[x]` Regra de ordenação booleana composta com o campo seguinte.
 - `[x]` Exibição de lookup na grade mostra label, nunca o ID bruto; a resolução
@@ -159,6 +162,10 @@ ordem dos registros. No clear-crud, essas decisões ficam separadas:
   resultados e o Vue apenas exibe. Falta equivalência nos outros adapters,
   total geral e medidas adicionais (`avg`, `min`, `max`); nunca aceitar
   `GROUP BY` ou campos arbitrários do navegador.
+- `[x]` Smokes 12 e 13 comprovam duas apresentações genéricas para os mesmos
+  detalhes somente leitura: expansão inline pela linha selecionada via slot, e
+  modal controlado pelo host via evento. O host carrega os dados permitidos; o
+  renderer não recebe regra de relatório nem envia mutação.
 - `[x]` Comentar as definições Go de todos os smokes por etapas, explicando
   propósito, efeito e limites de cada bloco; manter o índice no manual e os
   excertos apresentados no demo coerentes com `definitions.go`.
@@ -284,7 +291,9 @@ ordem dos registros. No clear-crud, essas decisões ficam separadas:
 
 - `[x]` Valores canônicos para data, datetime e decimal no contrato.
 - `[x]` Mensagens localizáveis no renderer.
-- `[ ]` Formatação localizada de datas, horas e números apenas na apresentação.
+- `[x]` Formatação localizada e declarativa de números apenas na apresentação
+  (campos do grid e medidas de relatórios); datas/horas e timezone permanecem
+  pendentes. Valores canônicos não recebem prefixo/sufixo no transporte.
 - `[ ]` Definir origem confiável do timezone no host.
 - `[-]` Não portar `$charset_mysql` ou configuração específica de MySQL para o
   core.

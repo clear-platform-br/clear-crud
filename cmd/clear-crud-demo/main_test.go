@@ -29,6 +29,7 @@ const demoEnumTable = "clear_crud_disposable_junk_contacts_enum"
 const demoLookupTable = "clear_crud_reference_lookup_demo"
 const demoReadModelTable = "clear_crud_reference_read_model_demo"
 const demoGroupedReportTable = "clear_crud_grouped_report_demo"
+const demoGroupedReportDetailsResource = groupedReportDetailsResource
 const demoAuxiliaryCatalogTable = "clear_crud_auxiliary_catalogs"
 const demoAuxiliaryCatalogLookupTable = "clear_crud_auxiliary_catalog_lookup_demo"
 const demoAuxiliaryCatalogChannelLookupTable = "clear_crud_auxiliary_catalog_channel_lookup_demo"
@@ -203,7 +204,35 @@ func TestDemoGroupedReportSmoke(t *testing.T) {
 		t.Fatalf("grouped report subtotals = %#v, want %#v", got, want)
 	}
 
-	// 3. Os mesmos níveis respeitam os filtros: somente janeiro de 2026.
+	// 3. O host consegue carregar linhas por ID do documento sem abrir escrita;
+	// o escopo confiável também impede que o ID de outro tenant revele detalhes.
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/crud/"+demoGroupedReportDetailsResource+"/records?page=1&size=25&filter.report_id.eq=1", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("grouped report details = %d: %s", response.Code, response.Body.String())
+	}
+	var detailEnvelope struct {
+		Data []crud.Record `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &detailEnvelope); err != nil {
+		t.Fatal(err)
+	}
+	if len(detailEnvelope.Data) != 2 || detailEnvelope.Data[0].Fields["document_name"] != "Documento A" || detailEnvelope.Data[0].Fields["description"] != "Parcela principal" || reportInteger(t, "amount_cents", detailEnvelope.Data[0].Fields["amount_cents"]) != 75 || reportInteger(t, "amount_cents", detailEnvelope.Data[1].Fields["amount_cents"]) != 25 {
+		t.Fatalf("grouped report detail lines = %#v", detailEnvelope.Data)
+	}
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/crud/"+demoGroupedReportDetailsResource+"/records?page=1&size=25&filter.report_id.eq=7", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("cross-tenant grouped report details = %d: %s", response.Code, response.Body.String())
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &detailEnvelope); err != nil {
+		t.Fatal(err)
+	}
+	if len(detailEnvelope.Data) != 0 {
+		t.Fatalf("cross-tenant detail lines leaked: %#v", detailEnvelope.Data)
+	}
+
+	// 4. Os mesmos níveis respeitam os filtros: somente janeiro de 2026.
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/crud/"+demoGroupedReportTable+"/records?page=1&size=2&filter.year.eq=2026", nil))
 	if response.Code != http.StatusOK {

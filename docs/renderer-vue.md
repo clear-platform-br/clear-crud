@@ -110,6 +110,54 @@ ao refresh sem alterar a definição nem o backend. Na grade, textos ficam à
 esquerda, números à direita e booleanos centralizados; os símbolos booleanos
 podem ser declarados em `Field.BooleanDisplay`.
 
+### Formatação declarada de números
+
+`Field.NumericDisplay` e `ReportMeasure.NumericDisplay` permitem declarar
+formatação de apresentação sem alterar o valor canônico. O locale é obrigatório;
+moeda, escala, casas decimais mínimas e prefixo/sufixo são opcionais. Por
+exemplo, um inteiro em centavos pode declarar `Locale: "pt-BR"`,
+`Currency: "BRL"` e `Scale: 2`. O símbolo deriva da moeda declarada ou de um
+prefixo/sufixo escolhido pelo consumidor; o renderer não fixa unidade alguma.
+
+O formatter não substitui o número por texto no client nem altera records,
+respostas HTTP, ordenação, filtros, totais ou persistência. Inteiros agregados
+continuam strings decimais exatas até a apresentação. A opção se aplica à
+grade e aos subtotais; não transforma campos editáveis em entradas monetárias
+nem acrescenta unidade ao dado salvo.
+
+### Ação de detalhes controlada pelo host
+
+O host pode opcionalmente fornecer `recordDetailsLabel` ao `CrudScreen`. O
+renderer então apresenta essa ação na linha e emite `record-details` com
+somente o ID do registro. Há duas apresentações, escolhidas pela integração
+Vue do consumidor:
+
+- Com o slot `record-details`, o renderer alterna uma linha de conteúdo
+  imediatamente abaixo do registro clicado. O slot recebe `recordId`; o host
+  carrega e renderiza os detalhes, enquanto o renderer cuida da expansão e do
+  recolhimento.
+- Sem o slot, o host trata `@record-details` e pode abrir um modal ou outra
+  apresentação própria.
+
+Em ambos os modos, autorização, seleção dos dados e carregamento pertencem ao
+host. A ação não abre edição nem altera registros. Os Smokes 12 e 13 mostram
+essas duas opções com o mesmo read model e os mesmos dados.
+
+### Formatação declarada de números
+
+`Field.NumericDisplay` e `ReportMeasure.NumericDisplay` permitem declarar
+formatação de apresentação sem alterar o valor canônico. O locale é obrigatório;
+moeda, escala, casas decimais mínimas e prefixo/sufixo são opcionais. Por
+exemplo, um inteiro em centavos pode declarar `Locale: "pt-BR"`,
+`Currency: "BRL"` e `Scale: 2`. O símbolo deriva da moeda declarada ou de um
+prefixo/sufixo escolhido pelo consumidor; o renderer não fixa unidade alguma.
+
+O formatter não substitui o número por texto no client nem altera records,
+respostas HTTP, ordenação, filtros, totais ou persistência. Inteiros agregados
+continuam strings decimais exatas até a apresentação. A opção se aplica à
+grade e aos subtotais; não transforma campos editáveis em entradas monetárias
+nem acrescenta unidade ao dado salvo.
+
 O toolbar também publica `Filtros` sem configuração adicional. O renderer gera
 um controle para cada coluna pública de `Grid.Columns`; enums e booleanos usam
 checkboxes e aceitam várias opções, enviando uma operação `in` com os valores

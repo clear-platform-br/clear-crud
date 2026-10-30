@@ -96,10 +96,25 @@ func TestValidateDefinitionCoversStartupBoundaries(t *testing.T) {
 			definition.Fields[0].BooleanDisplay = &BooleanDisplay{True: "✓", False: "×"}
 		}, "fields[0].booleanDisplay"},
 		"boolean display needs both symbols": {func(definition *Definition) { definition.Fields[1].BooleanDisplay = &BooleanDisplay{True: "✓"} }, "fields[1].booleanDisplay"},
-		"invalid page mode":                  {func(definition *Definition) { definition.Grid.Pagination.Mode = "page" }, "grid.pagination.mode"},
-		"default page size must be allowed":  {func(definition *Definition) { definition.Grid.Pagination.DefaultSize = 10 }, "grid.pagination.defaultSize"},
-		"invalid density":                    {func(definition *Definition) { definition.Presentation.Density = "dense" }, "presentation.density"},
-		"title field must exist":             {func(definition *Definition) { definition.Presentation.TitleField = "missing" }, "presentation.title_field"},
+		"numeric display only on numeric fields": {func(definition *Definition) {
+			definition.Fields[0].NumericDisplay = &NumericDisplay{Locale: "pt-BR"}
+		}, "fields[0].numericDisplay"},
+		"numeric display needs a locale": {func(definition *Definition) {
+			definition.Fields[0].Type = FieldInteger
+			definition.Fields[0].NumericDisplay = &NumericDisplay{Locale: "pt BR"}
+		}, "fields[0].numericDisplay.locale"},
+		"scaled display only on integer fields": {func(definition *Definition) {
+			definition.Fields[0].Type = FieldDecimal
+			definition.Fields[0].NumericDisplay = &NumericDisplay{Locale: "pt-BR", Scale: 2}
+		}, "fields[0].numericDisplay.scale"},
+		"numeric currency code requires three uppercase letters": {func(definition *Definition) {
+			definition.Fields[0].Type = FieldInteger
+			definition.Fields[0].NumericDisplay = &NumericDisplay{Locale: "pt-BR", Currency: "brl"}
+		}, "fields[0].numericDisplay.currency"},
+		"invalid page mode":                 {func(definition *Definition) { definition.Grid.Pagination.Mode = "page" }, "grid.pagination.mode"},
+		"default page size must be allowed": {func(definition *Definition) { definition.Grid.Pagination.DefaultSize = 10 }, "grid.pagination.defaultSize"},
+		"invalid density":                   {func(definition *Definition) { definition.Presentation.Density = "dense" }, "presentation.density"},
+		"title field must exist":            {func(definition *Definition) { definition.Presentation.TitleField = "missing" }, "presentation.title_field"},
 		"title field must be visible": {func(definition *Definition) {
 			definition.Fields[0].Visible = false
 			definition.Presentation.TitleField = "name"

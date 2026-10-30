@@ -38,6 +38,8 @@ type ReportMeasure struct {
 	Label     MessageCode
 	Operation ReportOperation
 	Field     FieldKey `json:",omitempty"`
+	// NumericDisplay affects only how the renderer presents this measure.
+	NumericDisplay *NumericDisplay `json:",omitempty"`
 }
 
 // ReportSummary contains subtotals for grouping paths represented on a page.
@@ -73,6 +75,9 @@ func cloneReportDefinition(report *ReportDefinition) *ReportDefinition {
 	clone := *report
 	clone.Groups = append([]ReportGroup(nil), report.Groups...)
 	clone.Measures = append([]ReportMeasure(nil), report.Measures...)
+	for index := range clone.Measures {
+		clone.Measures[index].NumericDisplay = cloneNumericDisplay(report.Measures[index].NumericDisplay)
+	}
 	return &clone
 }
 
@@ -111,6 +116,9 @@ func validateReport(report *ReportDefinition, fields map[FieldKey]Field, sortabl
 		path := fmt.Sprintf("grid.report.measures[%d]", index)
 		if !validKey(measure.Key) || measure.Label == "" {
 			return invalidDefinition(path, "requires a lowercase key and label")
+		}
+		if err := validateNumericDisplay(measure.NumericDisplay, path+".numericDisplay"); err != nil {
+			return err
 		}
 		if _, exists := seenMeasures[measure.Key]; exists {
 			return invalidDefinition("grid.report.measures", "must not contain duplicate keys")

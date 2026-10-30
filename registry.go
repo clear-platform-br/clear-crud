@@ -129,6 +129,7 @@ func cloneDefinition(definition Definition) Definition {
 			booleanDisplay := *field.BooleanDisplay
 			clone.Fields[index].BooleanDisplay = &booleanDisplay
 		}
+		clone.Fields[index].NumericDisplay = cloneNumericDisplay(field.NumericDisplay)
 		if field.Lookup != nil {
 			lookup := *field.Lookup
 			lookup.Dependencies = append([]FieldKey(nil), field.Lookup.Dependencies...)

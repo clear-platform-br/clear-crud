@@ -337,6 +337,9 @@ return sqladapter.RegisterReadModel(ctx, database, registry, definition,
 // O adapter aplica o escopo e os filtros antes da totalização; o subtotal cobre
 // todos os registros correspondentes, não apenas a página visível.
 // 1. Declare todos os campos usados pelo agrupamento, detalhe e totalização.
+// A formatação é declarada pelo consumidor e afeta somente a tela; os dados
+// continuam como centavos inteiros para ordenação, filtros e cálculos.
+amountDisplay := crud.NumericDisplay{Locale: "pt-BR", Currency: "BRL", Scale: 2}
 definition := crud.Definition{
   Contract: crud.ContractDefinitionV1,
   Key: "clear_crud_grouped_report_demo",
@@ -351,7 +354,7 @@ definition := crud.Definition{
     {Key: "year", Label: "crud.field.year", Type: crud.FieldInteger, Visible: true, ReadOnly: true},
     {Key: "month", Label: "crud.field.month", Type: crud.FieldInteger, Visible: true, ReadOnly: true},
     {Key: "document_name", Label: "crud.field.document_name", Type: crud.FieldString, Visible: true, ReadOnly: true},
-    {Key: "amount_cents", Label: "crud.field.amount_cents", Type: crud.FieldInteger, Visible: true, ReadOnly: true},
+    {Key: "amount_cents", Label: "crud.field.amount_cents", Type: crud.FieldInteger, Visible: true, ReadOnly: true, NumericDisplay: &amountDisplay},
   },
 
   // 2. Grade: Columns controla linhas/colunas; Groups controla os níveis de
@@ -375,7 +378,7 @@ definition := crud.Definition{
       // Count conta registros; Sum soma um campo inteiro, aqui centavos exatos.
       Measures: []crud.ReportMeasure{
         {Key: "documents", Label: "crud.report.documents", Operation: crud.ReportCount},
-        {Key: "amount_cents", Label: "crud.report.amount_cents", Operation: crud.ReportSum, Field: "amount_cents"},
+        {Key: "amount_cents", Label: "crud.report.amount_cents", Operation: crud.ReportSum, Field: "amount_cents", NumericDisplay: &amountDisplay},
       },
     },
   },
@@ -407,6 +410,42 @@ sqladapter.RegisterReadModel(ctx, database, registry, definition, sqladapter.Rea
   FROM report_rows\`,
   IDColumn: "id",
   Searchable: []crud.FieldKey{"document_name"},
+})
+
+// 4. No mesmo registro do smoke, declare as linhas em outro read model
+//    tenant-scoped. report_id pode ser filtrado pelo host, mas não vira coluna
+//    porque foi omitido de Grid.Columns. Estes dados também são sintéticos.
+detailDefinition := crud.Definition{
+  Contract: crud.ContractDefinitionV1,
+  Key: "clear_crud_grouped_report_detail_lines_demo",
+  Scope: crud.ScopeRequirements{Mode: crud.ScopeModeTenant, Keys: []string{"tenant_id"}},
+  Permissions: crud.Permissions{Read: "crud.clear_crud_grouped_report_details.read"},
+  Fields: []crud.Field{
+    {Key: "report_id", Label: "crud.field.report_id", Type: crud.FieldInteger, Visible: true, ReadOnly: true},
+    {Key: "document_name", Label: "crud.field.document_name", Type: crud.FieldString, Visible: true, ReadOnly: true},
+    {Key: "line_number", Label: "crud.field.line_number", Type: crud.FieldInteger, Visible: true, ReadOnly: true},
+    {Key: "description", Label: "crud.field.description", Type: crud.FieldString, Visible: true, ReadOnly: true},
+    {Key: "amount_cents", Label: "crud.field.amount_cents", Type: crud.FieldInteger, Visible: true, ReadOnly: true, NumericDisplay: &amountDisplay},
+  },
+  Grid: crud.GridDefinition{
+    Columns: []crud.FieldKey{"line_number", "description", "amount_cents"},
+    Pagination: crud.PaginationDefinition{Mode: crud.PageModeOffset, DefaultSize: 25, AllowedSizes: []uint16{25}, Total: true},
+  },
+  Presentation: crud.Presentation{Collection: crud.CollectionTable},
+  Delete: crud.DeletePolicy{Mode: crud.DeleteModeNone},
+}
+
+sqladapter.RegisterReadModel(ctx, database, registry, detailDefinition, sqladapter.ReadModelConfig{
+  Query: \`WITH detail_rows(id, tenant_id, report_id, document_name, line_number, description, amount_cents) AS (
+    SELECT 101, 'demo_tenant_alpha', 1, 'Documento A', 1, 'Parcela principal', 75 UNION ALL
+    SELECT 102, 'demo_tenant_alpha', 1, 'Documento A', 2, 'Complemento', 25 UNION ALL
+    SELECT 201, 'demo_tenant_alpha', 2, 'Documento B', 1, 'Parcela principal', 200 UNION ALL
+    SELECT 202, 'demo_tenant_alpha', 2, 'Documento B', 2, 'Complemento', 50 UNION ALL
+    SELECT 701, 'demo_tenant_beta', 7, 'Outro tenant', 1, 'Linha de outro tenant', 90000
+  )
+  SELECT id, tenant_id, report_id, document_name, line_number, description, amount_cents
+  FROM detail_rows\`,
+  IDColumn: "id",
 })`,
   auxiliaryDetailLookup: `// SMOKE 11 — Lookup dentro de filho detail-only.
 // Objetivo: o filho não tem listagem/edição independente, mas o renderer do

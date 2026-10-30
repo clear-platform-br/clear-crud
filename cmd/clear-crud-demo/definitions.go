@@ -8,6 +8,11 @@ import (
 	"github.com/clear-platform-br/clear-crud/sqladapter"
 )
 
+const (
+	groupedReportResource        = "clear_crud_grouped_report_demo"
+	groupedReportDetailsResource = "clear_crud_grouped_report_detail_lines_demo"
+)
+
 // registerDefinitions is the complete, server-owned catalog of demo CRUDs.
 // The numbered comments identify the corresponding smoke shown by the demo;
 // see demo/web/src/definitionSnippets.ts for the human-readable excerpts.
@@ -455,6 +460,9 @@ func registerGroupedReportDemo(ctx context.Context, database *sql.DB, registry *
 	// Smoke 12. Este recurso é um relatório imutável: campos, escopo, pesquisa,
 	// ordenação, paginação, níveis e medidas compõem uma allowlist server-owned.
 	// Os campos continuam declarados e tipados como em qualquer CRUD.
+	// NumericDisplay é opcional e só formata a apresentação. O valor armazenado
+	// e agregado continua em centavos inteiros, sem símbolo concatenado.
+	amountDisplay := crud.NumericDisplay{Locale: "pt-BR", Currency: "BRL", Scale: 2}
 	definition := crud.Definition{
 		Contract:    crud.ContractDefinitionV1,
 		Key:         "clear_crud_grouped_report_demo",
@@ -465,7 +473,7 @@ func registerGroupedReportDemo(ctx context.Context, database *sql.DB, registry *
 			{Key: "year", Label: "crud.field.year", Type: crud.FieldInteger, Visible: true, ReadOnly: true},
 			{Key: "month", Label: "crud.field.month", Type: crud.FieldInteger, Visible: true, ReadOnly: true},
 			{Key: "document_name", Label: "crud.field.document_name", Type: crud.FieldString, Visible: true, ReadOnly: true},
-			{Key: "amount_cents", Label: "crud.field.amount_cents", Type: crud.FieldInteger, Visible: true, ReadOnly: true},
+			{Key: "amount_cents", Label: "crud.field.amount_cents", Type: crud.FieldInteger, Visible: true, ReadOnly: true, NumericDisplay: &amountDisplay},
 		},
 		Grid: crud.GridDefinition{
 			Columns:     []crud.FieldKey{"year", "month", "document_name", "amount_cents"},
@@ -477,7 +485,7 @@ func registerGroupedReportDemo(ctx context.Context, database *sql.DB, registry *
 				Groups: []crud.ReportGroup{{Field: "year", Direction: crud.SortAscending}, {Field: "month", Direction: crud.SortAscending}},
 				Measures: []crud.ReportMeasure{
 					{Key: "documents", Label: "crud.report.documents", Operation: crud.ReportCount},
-					{Key: "amount_cents", Label: "crud.report.amount_cents", Operation: crud.ReportSum, Field: "amount_cents"},
+					{Key: "amount_cents", Label: "crud.report.amount_cents", Operation: crud.ReportSum, Field: "amount_cents", NumericDisplay: &amountDisplay},
 				},
 			},
 		},
@@ -490,7 +498,7 @@ func registerGroupedReportDemo(ctx context.Context, database *sql.DB, registry *
 	// smoke não depende de migrations nem escreve no banco SQLite do demo. Os
 	// registros beta provam isolamento: não entram nas páginas nem nos totais do
 	// tenant alpha. Datas são decompostas em ano/mês pela fonte; o adapter agrupa.
-	return sqladapter.RegisterReadModel(ctx, database, registry, definition, sqladapter.ReadModelConfig{
+	if err := sqladapter.RegisterReadModel(ctx, database, registry, definition, sqladapter.ReadModelConfig{
 		Query: `WITH report_rows(id, tenant_id, document_date, document_name, amount_cents) AS (
 			SELECT 1, 'demo_tenant_alpha', '2025-11-01', 'Documento A', 100 UNION ALL
 			SELECT 2, 'demo_tenant_alpha', '2025-11-05', 'Documento B', 250 UNION ALL
@@ -505,6 +513,59 @@ func registerGroupedReportDemo(ctx context.Context, database *sql.DB, registry *
 			document_name, amount_cents FROM report_rows`,
 		IDColumn:   "id",
 		Searchable: []crud.FieldKey{"document_name"},
+	}); err != nil {
+		return err
+	}
+
+	// O mesmo smoke registra linhas relacionadas em outro read model tenant-scoped.
+	// O host recebe o ID do documento no evento record-details e busca somente
+	// as linhas com esse report_id; o renderer não inicia edição nem mutação.
+	detailDefinition := crud.Definition{
+		Contract:    crud.ContractDefinitionV1,
+		Key:         groupedReportDetailsResource,
+		Labels:      crud.Labels{Title: "crud.clear_crud_grouped_report_details.title", Singular: "crud.clear_crud_grouped_report_details.singular"},
+		Scope:       crud.ScopeRequirements{Mode: crud.ScopeModeTenant, Keys: []string{"tenant_id"}},
+		Permissions: crud.Permissions{Read: "crud.clear_crud_grouped_report_details.read"},
+		Fields: []crud.Field{
+			// Publicamente filtrável pelo host; não é coluna porque Grid.Columns o omite.
+			{Key: "report_id", Label: "crud.field.report_id", Type: crud.FieldInteger, Visible: true, ReadOnly: true},
+			{Key: "document_name", Label: "crud.field.document_name", Type: crud.FieldString, Visible: true, ReadOnly: true},
+			{Key: "line_number", Label: "crud.field.line_number", Type: crud.FieldInteger, Visible: true, ReadOnly: true},
+			{Key: "description", Label: "crud.field.description", Type: crud.FieldString, Visible: true, ReadOnly: true},
+			{Key: "amount_cents", Label: "crud.field.amount_cents", Type: crud.FieldInteger, Visible: true, ReadOnly: true, NumericDisplay: &amountDisplay},
+		},
+		Grid: crud.GridDefinition{
+			Columns:     []crud.FieldKey{"line_number", "description", "amount_cents"},
+			Searchable:  []crud.FieldKey{"description"},
+			Sortable:    []crud.FieldKey{"line_number", "description"},
+			DefaultSort: []crud.Sort{{Field: "line_number", Direction: crud.SortAscending}},
+			Pagination:  crud.PaginationDefinition{Mode: crud.PageModeOffset, DefaultSize: 25, AllowedSizes: []uint16{25}, Total: true},
+		},
+		Presentation: crud.Presentation{Collection: crud.CollectionTable, Density: crud.DensityComfortable},
+		Delete:       crud.DeletePolicy{Mode: crud.DeleteModeNone},
+		Concurrency:  crud.ConcurrencyPolicy{Mode: crud.ConcurrencyNone},
+	}
+
+	return sqladapter.RegisterReadModel(ctx, database, registry, detailDefinition, sqladapter.ReadModelConfig{
+		Query: `WITH detail_rows(id, tenant_id, report_id, document_name, line_number, description, amount_cents) AS (
+			SELECT 101, 'demo_tenant_alpha', 1, 'Documento A', 1, 'Parcela principal', 75 UNION ALL
+			SELECT 102, 'demo_tenant_alpha', 1, 'Documento A', 2, 'Complemento', 25 UNION ALL
+			SELECT 201, 'demo_tenant_alpha', 2, 'Documento B', 1, 'Parcela principal', 200 UNION ALL
+			SELECT 202, 'demo_tenant_alpha', 2, 'Documento B', 2, 'Complemento', 50 UNION ALL
+			SELECT 301, 'demo_tenant_alpha', 3, 'Documento C', 1, 'Parcela principal', 225 UNION ALL
+			SELECT 302, 'demo_tenant_alpha', 3, 'Documento C', 2, 'Complemento', 75 UNION ALL
+			SELECT 401, 'demo_tenant_alpha', 4, 'Documento D', 1, 'Parcela principal', 350 UNION ALL
+			SELECT 402, 'demo_tenant_alpha', 4, 'Documento D', 2, 'Complemento', 50 UNION ALL
+			SELECT 501, 'demo_tenant_alpha', 5, 'Documento E', 1, 'Parcela principal', 400 UNION ALL
+			SELECT 502, 'demo_tenant_alpha', 5, 'Documento E', 2, 'Complemento', 100 UNION ALL
+			SELECT 601, 'demo_tenant_alpha', 6, 'Documento F', 1, 'Parcela principal', 450 UNION ALL
+			SELECT 602, 'demo_tenant_alpha', 6, 'Documento F', 2, 'Complemento', 150 UNION ALL
+			SELECT 701, 'demo_tenant_beta', 7, 'Documento de outro tenant', 1, 'Linha de outro tenant', 90000
+		)
+		SELECT id, tenant_id, report_id, document_name, line_number, description, amount_cents
+		FROM detail_rows`,
+		IDColumn:   "id",
+		Searchable: []crud.FieldKey{"description"},
 	})
 }
 
