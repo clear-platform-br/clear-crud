@@ -9,6 +9,11 @@ function page(current: number, total?: number, recordCount = 1): Page {
 }
 
 describe('CrudPagination', () => {
+  it.each([0, 1, 10])('hides navigation when the known result fits in one page (total %i)', (total) => {
+    const wrapper = mount(CrudPagination, { props: { page: page(1, total), messages: ptBR, loading: false } })
+    expect(wrapper.find('[data-clear-crud-part="pagination"]').exists()).toBe(false)
+  })
+
   it('shows nearby pages with first and last shortcuts', () => {
     const wrapper = mount(CrudPagination, { props: { page: page(8, 1000), messages: ptBR, loading: false } })
     expect(wrapper.findAll('.crud-pagination-page').map((item) => item.text())).toEqual(['1', '7', '8', '9', '100'])

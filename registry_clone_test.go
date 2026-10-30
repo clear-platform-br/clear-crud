@@ -36,6 +36,28 @@ func TestRegistryClonesLookupAndEnumDetails(t *testing.T) {
 	}
 }
 
+func TestRegistryClonesNumericDisplayMetadata(t *testing.T) {
+	t.Parallel()
+	definition := validDefinition("formatted_values")
+	definition.Fields[0].Type = FieldInteger
+	definition.Fields[0].NumericDisplay = &NumericDisplay{Locale: "pt-BR", Currency: "BRL", Scale: 2, Prefix: "", Suffix: ""}
+
+	registry := NewRegistry()
+	if err := registry.Register(context.Background(), definition); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	definition.Fields[0].NumericDisplay.Locale = "en-US"
+	stored, _ := registry.Get(definition.Key)
+	if stored.Fields[0].NumericDisplay.Locale != "pt-BR" {
+		t.Fatal("registry must clone numeric display metadata during registration")
+	}
+	stored.Fields[0].NumericDisplay.Locale = "fr-FR"
+	again, _ := registry.Get(definition.Key)
+	if again.Fields[0].NumericDisplay.Locale != "pt-BR" {
+		t.Fatal("registry must clone numeric display metadata when returning definitions")
+	}
+}
+
 func TestRegistryPrecompilesFieldPatterns(t *testing.T) {
 	t.Parallel()
 	definition := validDefinition("patterned")

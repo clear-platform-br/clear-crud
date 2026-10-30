@@ -1,4 +1,4 @@
-import type { CrudRecord, CrudTransport, DetailFieldMetadataSource, Field, LookupOption, Mutation, NumericFilterRange, Page, PublicDefinition, Query, ReportSummary, Value } from './types.js'
+import type { CrudRecord, CrudTransport, DetailFieldMetadataSource, Field, LookupOption, Mutation, NumericDisplay, NumericFilterRange, Page, PublicDefinition, Query, ReportSummary, Value } from './types.js'
 
 interface Envelope<T> { data: T; meta?: { page?: number; size?: number; total?: number; nextCursor?: string; report?: unknown; filterRanges?: unknown } }
 interface ErrorEnvelope { error?: { code?: string; message?: string; fields?: Record<string, string>; correlationId?: string } }
@@ -155,6 +155,7 @@ function normalizeField(value: unknown): Field {
     Key: String(raw.Key ?? raw.key ?? ''), Label: String(raw.Label ?? raw.label ?? ''), DisplayLabel: nonEmptyStringOrUndefined(raw.DisplayLabel ?? raw.displayLabel), Help: nonEmptyStringOrUndefined(raw.Help ?? raw.help), Type: String(raw.Type ?? raw.type ?? 'string') as Field['Type'],
     Required: Boolean(raw.Required ?? raw.required), ReadOnly: Boolean(raw.ReadOnly ?? raw.readOnly), CreateOnly: Boolean(raw.CreateOnly ?? raw.createOnly), Visible: Boolean(raw.Visible ?? raw.visible), Sensitive: Boolean(raw.Sensitive ?? raw.sensitive), Default: (raw.Default ?? raw.default) as Value | undefined,
     BooleanDisplay: normalizeBooleanDisplay(raw.BooleanDisplay ?? raw.booleanDisplay),
+    NumericDisplay: normalizeNumericDisplay(raw.NumericDisplay ?? raw.numericDisplay),
     EnumControl: normalizeEnumControl(raw.EnumControl ?? raw.enumControl),
     MinLength: positiveNumberOrUndefined(raw.MinLength ?? raw.minLength), MaxLength: positiveNumberOrUndefined(raw.MaxLength ?? raw.maxLength), Minimum: nonEmptyStringOrUndefined(raw.Minimum ?? raw.minimum), Maximum: nonEmptyStringOrUndefined(raw.Maximum ?? raw.maximum),
     Enum: asArray(raw.Enum ?? raw.enum).map((option) => { const item = asObject(option); return { Value: (item.Value ?? item.value ?? null) as Value, Label: String(item.Label ?? item.label ?? '') } }),
@@ -182,6 +183,21 @@ function normalizeBooleanDisplay(value: unknown): Field['BooleanDisplay'] {
   return trueSymbol && falseSymbol ? { True: trueSymbol, False: falseSymbol } : undefined
 }
 
+function normalizeNumericDisplay(value: unknown): NumericDisplay | undefined {
+  if (value === undefined || value === null) return undefined
+  const raw = asObject(value)
+  const locale = nonEmptyStringOrUndefined(raw.Locale ?? raw.locale)
+  if (!locale) return undefined
+  return {
+    Locale: locale,
+    Currency: nonEmptyStringOrUndefined(raw.Currency ?? raw.currency),
+    Scale: nonNegativeNumberOrUndefined(raw.Scale ?? raw.scale),
+    MinimumFractionDigits: nonNegativeNumberOrUndefined(raw.MinimumFractionDigits ?? raw.minimumFractionDigits),
+    Prefix: nonEmptyStringOrUndefined(raw.Prefix ?? raw.prefix),
+    Suffix: nonEmptyStringOrUndefined(raw.Suffix ?? raw.suffix),
+  }
+}
+
 function normalizeEnumControl(value: unknown): Field['EnumControl'] {
   return value === 'auto' || value === 'select' || value === 'radio' || value === 'segmented' || value === 'buttons' ? value : undefined
 }
@@ -193,7 +209,7 @@ function normalizeLookup(value: unknown): Field['Lookup'] {
 }
 function normalizeLabels(value: unknown): PublicDefinition['Labels'] { const raw = asObject(value); return { Title: String(raw.Title ?? raw.title ?? ''), Singular: String(raw.Singular ?? raw.singular ?? ''), Help: nonEmptyStringOrUndefined(raw.Help ?? raw.help) } }
 function normalizeGrid(value: unknown): PublicDefinition['Grid'] { const raw = asObject(value); const pagination = asObject(raw.Pagination ?? raw.pagination); const archiveVisibility = raw.ArchiveVisibility ?? raw.archiveVisibility; const report = raw.Report ?? raw.report; return { Columns: asArray(raw.Columns ?? raw.columns).map(String), Searchable: asArray(raw.Searchable ?? raw.searchable).map(String), Sortable: asArray(raw.Sortable ?? raw.sortable).map(String), DefaultSort: asArray(raw.DefaultSort ?? raw.defaultSort).map((sort) => { const item = asObject(sort); return { Field: String(item.Field ?? item.field ?? ''), Direction: String(item.Direction ?? item.direction ?? 'asc') as 'asc' | 'desc' } }), Pagination: { Mode: String(pagination.Mode ?? pagination.mode ?? 'offset') as 'offset' | 'cursor', DefaultSize: Number(pagination.DefaultSize ?? pagination.defaultSize ?? 25), AllowedSizes: asArray(pagination.AllowedSizes ?? pagination.allowedSizes).map(Number), Total: Boolean(pagination.Total ?? pagination.total) }, ArchiveVisibility: archiveVisibility === 'active_and_archived' ? 'active_and_archived' : 'active_only', ...(report === undefined ? {} : { Report: normalizeReportDefinition(report) }) } }
-function normalizeReportDefinition(value: unknown): NonNullable<PublicDefinition['Grid']['Report']> { const raw = asObject(value); return { Groups: asArray(raw.Groups ?? raw.groups).map((group) => { const item = asObject(group); return { Field: String(item.Field ?? item.field ?? ''), Direction: String(item.Direction ?? item.direction ?? 'asc') as 'asc' | 'desc' } }), Measures: asArray(raw.Measures ?? raw.measures).map((measure) => { const item = asObject(measure); const field = item.Field ?? item.field; return { Key: String(item.Key ?? item.key ?? ''), Label: String(item.Label ?? item.label ?? ''), Operation: String(item.Operation ?? item.operation ?? 'count') as 'count' | 'sum', ...(typeof field === 'string' && field ? { Field: field } : {}) } }) } }
+function normalizeReportDefinition(value: unknown): NonNullable<PublicDefinition['Grid']['Report']> { const raw = asObject(value); return { Groups: asArray(raw.Groups ?? raw.groups).map((group) => { const item = asObject(group); return { Field: String(item.Field ?? item.field ?? ''), Direction: String(item.Direction ?? item.direction ?? 'asc') as 'asc' | 'desc' } }), Measures: asArray(raw.Measures ?? raw.measures).map((measure) => { const item = asObject(measure); const field = item.Field ?? item.field; return { Key: String(item.Key ?? item.key ?? ''), Label: String(item.Label ?? item.label ?? ''), Operation: String(item.Operation ?? item.operation ?? 'count') as 'count' | 'sum', ...(typeof field === 'string' && field ? { Field: field } : {}), NumericDisplay: normalizeNumericDisplay(item.NumericDisplay ?? item.numericDisplay) } }) } }
 function normalizeReportSummary(value: unknown): ReportSummary { const raw = asObject(value); return { Subtotals: asArray(raw.Subtotals ?? raw.subtotals).map((subtotal) => { const item = asObject(subtotal); return { Level: Number(item.Level ?? item.level ?? 0), Values: asArray(item.Values ?? item.values) as Value[], Measures: asArray(item.Measures ?? item.measures).map((measure) => { const entry = asObject(measure); const aggregate = entry.Value ?? entry.value; return { Key: String(entry.Key ?? entry.key ?? ''), Value: aggregate === null || aggregate === undefined ? null : String(aggregate) } }) } }) } }
 function normalizeFilterRanges(value: unknown): Record<string, NumericFilterRange> {
   const raw = asObject(value)
@@ -212,4 +228,5 @@ function asObject(value: unknown): Record<string, unknown> { return value !== nu
 function asArray(value: unknown): unknown[] { return Array.isArray(value) ? value : [] }
 function numberOrUndefined(value: unknown): number | undefined { return typeof value === 'number' ? value : undefined }
 function positiveNumberOrUndefined(value: unknown): number | undefined { return typeof value === 'number' && value > 0 ? value : undefined }
+function nonNegativeNumberOrUndefined(value: unknown): number | undefined { return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined }
 function nonEmptyStringOrUndefined(value: unknown): string | undefined { return typeof value === 'string' && value !== '' ? value : undefined }

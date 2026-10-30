@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
+import { h } from 'vue'
 import CrudCollection from './CrudCollection.vue'
 import { ptBR, createTranslator } from '../messages.js'
 import type { PublicDefinition } from '@clear-platform-br/crud-client'
@@ -20,6 +21,46 @@ describe('CrudCollection', () => {
     await wrapper.get('[data-clear-crud-action="delete"]').trigger('click')
     expect(wrapper.emitted('edit')?.[0]).toEqual([record])
     expect(wrapper.emitted('remove')?.[0]).toEqual([record])
+  })
+
+  it('renders a consumer-labelled details action and emits only the record ID', async () => {
+    const record = { ID: 'record-7', Version: 3, Fields: { name: 'Documento' } }
+    const wrapper = mount(CrudCollection, { props: { definition, records: [record], messages: ptBR, translate: createTranslator(ptBR), loading: false, recordDetailsLabel: 'Abrir itens' } })
+    await wrapper.get('[data-clear-crud-action="record-details"]').trigger('click')
+    expect(wrapper.emitted('recordDetails')).toEqual([['record-7']])
+    expect(wrapper.emitted('edit')).toBeUndefined()
+    expect(wrapper.emitted('remove')).toBeUndefined()
+  })
+
+  it('renders host-provided detail lines directly below the selected row and toggles them', async () => {
+    const records = [
+      { ID: 'record-1', Version: 1, Fields: { name: 'Documento A' } },
+      { ID: 'record-2', Version: 1, Fields: { name: 'Documento B' } },
+    ]
+    const wrapper = mount(CrudCollection, {
+      props: { definition, records, messages: ptBR, translate: createTranslator(ptBR), loading: false, recordDetailsLabel: 'Detalhes' },
+      slots: {
+        'record-details': ({ recordId }: { recordId: string }) => h('div', { 'data-detail-for': recordId }, `Itens de ${recordId}`),
+      },
+    })
+
+    const buttons = wrapper.findAll('[data-clear-crud-action="record-details"]')
+    await buttons[0].trigger('click')
+    let rows = wrapper.findAll('tbody > tr')
+    expect(rows).toHaveLength(3)
+    expect(rows[1].attributes('data-clear-crud-part')).toBe('record-details')
+    expect(rows[1].find('[data-detail-for]').attributes('data-detail-for')).toBe('record-1')
+    expect(buttons[0].attributes('aria-expanded')).toBe('true')
+
+    await buttons[1].trigger('click')
+    rows = wrapper.findAll('tbody > tr')
+    expect(rows).toHaveLength(3)
+    expect(rows[1].attributes('data-clear-crud-part')).toBeUndefined()
+    expect(rows[2].attributes('data-clear-crud-part')).toBe('record-details')
+    expect(rows[2].find('[data-detail-for]').attributes('data-detail-for')).toBe('record-2')
+
+    await buttons[1].trigger('click')
+    expect(wrapper.findAll('[data-clear-crud-part="record-details"]')).toHaveLength(0)
   })
 
   it('aligns values by type and uses the declared boolean symbols', () => {
@@ -116,5 +157,32 @@ describe('CrudCollection', () => {
     expect(wrapper.findAll('[data-clear-crud-report-level]').map((row) => row.text())).toEqual(['Ano: 2025Registros: 4', 'Mês: 11Registros: 3'])
     expect(wrapper.findAll('[data-clear-crud-field="name"]')).toHaveLength(2)
     expect(wrapper.find('[data-clear-crud-field="year"]').exists()).toBe(false)
+  })
+
+  it('formats declared numeric fields and measures without changing their exact values', () => {
+    const formattedDefinition: PublicDefinition = {
+      ...definition,
+      Fields: [
+        ...definition.Fields,
+        { Key: 'year', Label: 'report.year', Type: 'integer', Required: true, ReadOnly: true, Visible: true, Sensitive: false },
+        { Key: 'amount_cents', Label: 'report.amount', Type: 'integer', Required: true, ReadOnly: true, Visible: true, Sensitive: false, NumericDisplay: { Locale: 'pt-BR', Currency: 'BRL', Scale: 2 } },
+      ],
+      Grid: {
+        ...definition.Grid,
+        Columns: ['year', 'name', 'amount_cents'],
+        Report: {
+          Groups: [{ Field: 'year', Direction: 'asc' }],
+          Measures: [{ Key: 'amount', Label: 'report.amount', Operation: 'sum', Field: 'amount_cents', NumericDisplay: { Locale: 'pt-BR', Currency: 'BRL', Scale: 2 } }],
+        },
+      },
+    }
+    const record = { ID: '1', Version: 1, Fields: { year: 2025, name: 'Documento', amount_cents: '9007199254740993' } }
+    const report = { Subtotals: [{ Level: 1, Values: [2025], Measures: [{ Key: 'amount', Value: '9007199254740993' }] }] }
+    const wrapper = mount(CrudCollection, { props: { definition: formattedDefinition, records: [record], report, messages: ptBR, translate: createTranslator(ptBR), loading: false } })
+
+    expect(wrapper.get('[data-clear-crud-field="amount_cents"]').text()).toBe('R$\u00a090.071.992.547.409,93')
+    expect(wrapper.get('.crud-report-measure-value').text()).toBe('R$\u00a090.071.992.547.409,93')
+    expect(record.Fields.amount_cents).toBe('9007199254740993')
+    expect(report.Subtotals[0].Measures[0].Value).toBe('9007199254740993')
   })
 })

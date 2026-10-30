@@ -86,6 +86,19 @@ describe('HttpCrudClient', () => {
     await expect(client.list('report', {})).resolves.toMatchObject({ report: { Subtotals: [{ Level: 1, Values: [2025], Measures: [{ Key: 'documents', Value: '4' }] }] } })
   })
 
+  it('preserves declared numeric formatting on fields and report measures', async () => {
+    const client = new HttpCrudClient({ fetch: async () => response(200, { data: {
+      Key: 'report', Labels: {},
+      Fields: [{ Key: 'amount', Type: 'integer', NumericDisplay: { Locale: 'pt-BR', Currency: 'BRL', Scale: 2 } }],
+      Details: [], Grid: { Report: { Groups: [], Measures: [{ Key: 'sum', Label: 'report.sum', Operation: 'sum', Field: 'amount', NumericDisplay: { locale: 'en-US', prefix: '$', minimumFractionDigits: 2 } }] } },
+      Form: {}, Presentation: {}, Actions: [],
+    } }) })
+    await expect(client.definition('report')).resolves.toMatchObject({
+      Fields: [{ NumericDisplay: { Locale: 'pt-BR', Currency: 'BRL', Scale: 2 } }],
+      Grid: { Report: { Measures: [{ NumericDisplay: { Locale: 'en-US', Prefix: '$', MinimumFractionDigits: 2 } }] } },
+    })
+  })
+
   it('normalizes server-owned numeric filter ranges without losing decimal precision', async () => {
     const client = new HttpCrudClient({ fetch: async () => response(200, {
       data: [], meta: { filterRanges: { year: { minimum: '1969', maximum: '2003' }, amount: { Minimum: '100.00', Maximum: '1000000.00' } } },

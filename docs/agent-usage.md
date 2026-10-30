@@ -306,7 +306,8 @@ especial no demo, no core ou no renderer.
 | Smoke 09 | `registerAuxiliaryChannelLookupDemo` com ID `30` | Lookup de um único catálogo; não é seletor de catálogo. |
 | Smoke 10 | `registerReferenceReadModelDemo` | Join/cálculo server-owned, campos somente leitura e escopo tenant. |
 | Smoke 11 | `registerAuxiliaryDetailLookupDemo` | Lookup exibido dentro de filho `detail-only`; acesso ao pai e filtro de opções são regras distintas. |
-| Smoke 12 | `registerGroupedReportDemo` | Níveis e medidas declarados; adapter SQL agrupa/totaliza no escopo e filtros. |
+| Smoke 12 | `registerGroupedReportDemo` + read model de linhas + slot de detalhe | Níveis/subtotais server-side; ao clicar em `Detalhes`, as linhas do documento aparecem logo abaixo da linha selecionada, somente leitura e no escopo tenant. |
+| Smoke 13 | Mesmo recurso, dados e read model do Smoke 12 + evento do host | Apresenta as mesmas linhas em modal; a única diferença é a integração Vue escolhida pelo consumidor. |
 
 Leia o comentário do bloco e depois acompanhe a definição inteira em
 `definitions.go`: um excerto pode omitir bootstrap, campos auxiliares ou
@@ -608,6 +609,102 @@ extensão documentada do contrato. No HTTP os inteiros agregados são strings
 decimais exatas para impedir arredondamento no JavaScript; o client preserva
 esse valor para exibição. `Grid.Report` é somente leitura e requer um
 adapter que declare `CapabilityGroupedReport` e implemente `ReportDataSource`.
+
+Para apresentar valores como moeda sem transformar números em texto, declare a
+formatação no campo e na medida correspondente. A formatação não altera o valor
+de centavos que o adapter soma nem a string decimal exata transportada pelo
+HTTP:
+
+```go
+amountDisplay := crud.NumericDisplay{Locale: "pt-BR", Currency: "BRL", Scale: 2}
+
+crud.Field{
+    Key: "amount_cents", Type: crud.FieldInteger, Visible: true, ReadOnly: true,
+    NumericDisplay: &amountDisplay,
+}
+
+crud.ReportMeasure{
+    Key: "amount_cents", Operation: crud.ReportSum, Field: "amount_cents",
+    NumericDisplay: &amountDisplay,
+}
+```
+
+`Locale` é explícito; `Currency`, `Scale`, `MinimumFractionDigits`, `Prefix` e
+`Suffix` são opcionais. Use `Scale: 2` somente se o inteiro estiver armazenado
+em unidades menores (como centavos). Prefixos/sufixos são adicionados somente
+na renderização. O mesmo dado continua utilizável em filtros, ordenação e
+cálculos; o renderer não presume `R$`, percentual ou outra unidade. A opção
+atua no grid e nos subtotais, não converte um input de edição em campo de moeda.
+
+Para uma ação de leitura definida pelo host, monte o renderer assim:
+
+```vue
+<CrudScreen
+  resource="records"
+  :client="client"
+  record-details-label="Abrir detalhes"
+  @record-details="openDetails"
+/>
+```
+
+O callback recebe somente o ID da linha. O host continua responsável por
+autorizar e carregar os próprios dados, usando um recurso permitido e um filtro
+de vínculo declarado no servidor. O host escolhe onde apresentar o resultado:
+
+- Para expansão inline, forneça o slot `record-details`; o renderer insere o
+  conteúdo depois da linha clicada e alterna uma linha por vez. O evento continua
+  sendo emitido para o host carregar os dados.
+- Para modal ou outra apresentação própria, omita o slot e trate o evento no
+  host. O Smoke 13 usa essa opção e mantém o modal visível até fechamento pelo
+  botão ou por `Esc`.
+
+O host também escolhe a área ocupada pela apresentação. Para manter o modal
+restrito ao CRUD, envolva `CrudScreen` e o painel do host em um contêiner com
+`position: relative` e posicione o fundo do modal de forma absoluta nesse
+contêiner. Assim, o overlay cobre a grade sem encobrir o título e a explicação
+do exemplo; o renderer não impõe um layout global ao host.
+
+Os Smokes 12 e 13 usam o mesmo recurso, registros, consulta de detalhe e escopo;
+muda somente a apresentação. Exemplo de expansão inline:
+
+```vue
+<CrudScreen
+  resource="reports"
+  :client="client"
+  record-details-label="Detalhes"
+  @record-details="loadDetails"
+>
+  <template #record-details="{ recordId }">
+    <ReportLines :record-id="recordId" />
+  </template>
+</CrudScreen>
+```
+
+O slot exibe o conteúdo da linha selecionada imediatamente abaixo dela; ele não
+define schema, consulta nem regra de domínio. No Smoke 12, o host busca linhas
+relacionadas por `report_id` em um recurso tenant-scoped e as renderiza ali.
+O escopo tenant é aplicado pelo backend; o ID do evento
+não escolhe tenant, tabela ou SQL. A ação não chama edição nem envia mutation
+CRUD.
+
+```ts
+async function openDetails(recordID: string) {
+  const details = await client.list('report_lines', {
+    filters: [{ field: 'report_id', operator: 'eq', value: Number(recordID) }],
+    page: 1,
+    size: 25,
+  })
+  selectedDetails.value = details.records
+}
+```
+
+O recurso `report_lines` precisa ser registrado no servidor com filtro e escopo
+tenant permitidos. O host renderiza `selectedDetails` como leitura; não transforme
+o evento em atalho para editar ou alterar linhas.
+Declare o campo de vínculo (`report_id`) no contrato do recurso de linhas para
+que o endpoint valide e tipifique o filtro HTTP; omita-o de `Grid.Columns` se
+não quiser exibi-lo como coluna. A tela de detalhes pode então mostrar apenas
+os campos destinados à pessoa usuária.
 
 Na geração automática, a ordenação usa o primeiro índice compatível com campos
 de negócio; prefixos técnicos de escopo podem antecedê-los no índice. Um índice

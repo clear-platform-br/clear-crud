@@ -225,6 +225,7 @@ func publicField(field Field) Field {
 		booleanDisplay := *field.BooleanDisplay
 		field.BooleanDisplay = &booleanDisplay
 	}
+	field.NumericDisplay = cloneNumericDisplay(field.NumericDisplay)
 	return field
 }
 

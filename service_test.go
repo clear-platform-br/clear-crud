@@ -57,6 +57,33 @@ func TestServiceDefinitionExposesOnlyRendererMetadataAndAllowedActions(t *testin
 	assertCode(t, err, ErrorNotFound)
 }
 
+func TestServiceDefinitionClonesNumericDisplay(t *testing.T) {
+	t.Parallel()
+	source := &recordingSource{}
+	source.capabilities = serviceCapabilities()
+	registry := NewRegistry()
+	definition := validDefinition("contact_categories")
+	definition.Fields[0].Type = FieldInteger
+	definition.Fields[0].NumericDisplay = &NumericDisplay{Locale: "pt-BR", Currency: "BRL", Scale: 2}
+	definition.Source = source
+	if err := registry.Register(context.Background(), definition); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	service := newServiceForRegistry(t, registry, source, &recordingAuthorizer{})
+	public, err := service.Definition(context.Background(), "contact_categories")
+	if err != nil {
+		t.Fatalf("Definition() error = %v", err)
+	}
+	public.Fields[0].NumericDisplay.Locale = "en-US"
+	again, err := service.Definition(context.Background(), "contact_categories")
+	if err != nil {
+		t.Fatalf("Definition() error = %v", err)
+	}
+	if again.Fields[0].NumericDisplay == nil || again.Fields[0].NumericDisplay.Locale != "pt-BR" {
+		t.Fatal("a caller must not be able to mutate registered formatting metadata")
+	}
+}
+
 func TestServiceListNormalizesScopeQueryAndRecordFields(t *testing.T) {
 	t.Parallel()
 

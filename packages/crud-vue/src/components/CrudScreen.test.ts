@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
+import { h } from 'vue'
 import type { CrudTransport, PublicDefinition } from '@clear-platform-br/crud-client'
 import CrudScreen from './CrudScreen.vue'
 import { ptBR } from '../messages.js'
@@ -39,5 +40,38 @@ describe('CrudScreen', () => {
     await wrapper.get('[data-clear-crud-action="apply-filters"]').trigger('click')
     await flushPromises()
     expect(list).toHaveBeenLastCalledWith('tickets', expect.objectContaining({ filters: [{ field: 'status', operator: 'in', values: ['review', 'closed'] }], page: 1 }), expect.anything())
+  })
+
+  it('forwards the opt-in read-only record details event to the host', async () => {
+    const list = vi.fn(async () => ({ records: [{ ID: 'invoice-42', Version: 1, Fields: { name: 'Documento', status: 'new' } }], page: 1, size: 25, total: 1 }))
+    const api = transport(list)
+    const update = vi.spyOn(api, 'update')
+    const remove = vi.spyOn(api, 'delete')
+    const wrapper = mount(CrudScreen, { props: { resource: 'tickets', client: api, messages: ptBR, recordDetailsLabel: 'Ver itens' } })
+    await flushPromises()
+    await wrapper.get('[data-clear-crud-action="record-details"]').trigger('click')
+
+    expect(wrapper.emitted('recordDetails')).toEqual([['invoice-42']])
+    expect(update).not.toHaveBeenCalled()
+    expect(remove).not.toHaveBeenCalled()
+  })
+
+  it('forwards the host detail slot so its content appears under the selected row', async () => {
+    const list = vi.fn(async () => ({ records: [{ ID: 'invoice-42', Version: 1, Fields: { name: 'Documento', status: 'new' } }], page: 1, size: 25, total: 1 }))
+    const wrapper = mount(CrudScreen, {
+      props: { resource: 'tickets', client: transport(list), messages: ptBR, recordDetailsLabel: 'Ver itens' },
+      slots: {
+        'record-details': ({ recordId }: { recordId: string }) => h('p', { 'data-loaded-details': recordId }, `Itens de ${recordId}`),
+      },
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-clear-crud-action="record-details"]').trigger('click')
+
+    const rows = wrapper.findAll('tbody > tr')
+    expect(rows).toHaveLength(2)
+    expect(rows[1].attributes('data-clear-crud-part')).toBe('record-details')
+    expect(rows[1].text()).toContain('Itens de invoice-42')
+    expect(wrapper.emitted('recordDetails')).toEqual([['invoice-42']])
   })
 })

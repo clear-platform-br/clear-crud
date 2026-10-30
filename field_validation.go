@@ -1,6 +1,44 @@
 package crud
 
-import "fmt"
+import (
+	"fmt"
+	"regexp"
+)
+
+var (
+	numericLocalePattern   = regexp.MustCompile(`^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$`)
+	numericCurrencyPattern = regexp.MustCompile(`^[A-Z]{3}$`)
+)
+
+func validateNumericDisplay(display *NumericDisplay, path string) error {
+	if display == nil {
+		return nil
+	}
+	if !numericLocalePattern.MatchString(display.Locale) {
+		return invalidDefinition(path+".locale", "must be a valid locale tag")
+	}
+	if display.Currency != "" && !numericCurrencyPattern.MatchString(display.Currency) {
+		return invalidDefinition(path+".currency", "must be a three-letter uppercase currency code")
+	}
+	if display.Scale > 9 {
+		return invalidDefinition(path+".scale", "must be between 0 and 9")
+	}
+	if display.MinimumFractionDigits > 9 {
+		return invalidDefinition(path+".minimumFractionDigits", "must be between 0 and 9")
+	}
+	if len(display.Prefix) > 64 || len(display.Suffix) > 64 {
+		return invalidDefinition(path, "prefix and suffix must not exceed 64 characters")
+	}
+	return nil
+}
+
+func cloneNumericDisplay(display *NumericDisplay) *NumericDisplay {
+	if display == nil {
+		return nil
+	}
+	clone := *display
+	return &clone
+}
 
 func validateFields(fields []Field) (map[FieldKey]Field, error) {
 	if len(fields) == 0 {
@@ -64,6 +102,17 @@ func validateFields(fields []Field) (map[FieldKey]Field, error) {
 func validateFieldConfiguration(field Field, path string) error {
 	if err := validatePatternDefinition(field, path); err != nil {
 		return err
+	}
+	if field.NumericDisplay != nil {
+		if field.Type != FieldInteger && field.Type != FieldDecimal {
+			return invalidDefinition(path+".numericDisplay", "is only allowed for integer or decimal fields")
+		}
+		if field.Type == FieldDecimal && field.NumericDisplay.Scale != 0 {
+			return invalidDefinition(path+".numericDisplay.scale", "is only allowed for integer fields")
+		}
+		if err := validateNumericDisplay(field.NumericDisplay, path+".numericDisplay"); err != nil {
+			return err
+		}
 	}
 	if field.EnumControl != "" && !validEnumControl(field.EnumControl) {
 		return invalidDefinition(path+".enumControl", "is unknown")

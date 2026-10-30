@@ -12,7 +12,8 @@ import CrudToolbar from './CrudToolbar.vue'
 import { createTranslator, ptBR, type CrudMessages } from '../messages.js'
 import { useCrudScreen } from '../composables/useCrudScreen.js'
 
-const props = withDefaults(defineProps<{ resource: string; client: CrudTransport; messages?: CrudMessages; resolveMessage?: (code: string) => string | undefined; searchDelay?: number }>(), { messages: () => ptBR, searchDelay: 250 })
+const props = withDefaults(defineProps<{ resource: string; client: CrudTransport; messages?: CrudMessages; resolveMessage?: (code: string) => string | undefined; searchDelay?: number; recordDetailsLabel?: string }>(), { messages: () => ptBR, searchDelay: 250 })
+const emit = defineEmits<{ recordDetails: [recordId: string] }>()
 const translate = computed(() => createTranslator(props.messages, props.resolveMessage))
 const screen = useCrudScreen(props.resource, props.client)
 const helpOpen = ref(false)
@@ -54,7 +55,11 @@ const activeFilterCount = computed(() => new Set((screen.state.value.query.filte
     <CrudFilters v-if="filtersOpen && screen.state.value.definition" :definition="screen.state.value.definition" :messages="props.messages" :translate="translate" :filters="screen.state.value.query.filters ?? []" :filter-ranges="screen.state.value.page?.filterRanges" :loading="loading" @apply="applyFilters" @close="filtersOpen = false" />
     <p v-if="!screen.state.value.definition" class="crud-loading" role="status">{{ props.messages.loading }}</p>
     <CrudFeedback :feedback="screen.state.value.feedback" :messages="props.messages" :translate="translate" @close="screen.dismissFeedback" />
-    <CrudCollection v-if="screen.state.value.definition && screen.state.value.page" :definition="screen.state.value.definition" :records="screen.state.value.page.records" :report="screen.state.value.page.report" :messages="props.messages" :translate="translate" :loading="loading" :lookup="screen.lookup" @edit="screen.beginEdit" @remove="screen.requestDelete" />
+    <CrudCollection v-if="screen.state.value.definition && screen.state.value.page" :definition="screen.state.value.definition" :records="screen.state.value.page.records" :report="screen.state.value.page.report" :messages="props.messages" :translate="translate" :loading="loading" :lookup="screen.lookup" :record-details-label="props.recordDetailsLabel" @edit="screen.beginEdit" @remove="screen.requestDelete" @record-details="emit('recordDetails', $event)">
+      <template v-if="$slots['record-details']" #record-details="{ recordId }">
+        <slot name="record-details" :record-id="recordId" />
+      </template>
+    </CrudCollection>
     <CrudPagination :page="screen.state.value.page" :messages="props.messages" :loading="loading" @previous="screen.previousPage" @next="screen.nextPage" @go-to="screen.goTo" />
     <CrudEditor v-if="screen.state.value.definition && screen.state.value.editor" :definition="screen.state.value.definition" :editor="screen.state.value.editor" :feedback="screen.state.value.feedback" :messages="props.messages" :translate="translate" :submitting="loading" :lookup="screen.lookup" @update-field="screen.updateField" @update-detail="screen.updateDetail" @add-detail="screen.addDetail" @remove-detail="screen.removeDetail" @submit="screen.submit" @cancel="screen.cancelEdit" />
     <CrudConfirmDelete v-if="screen.state.value.pendingDelete" :record="screen.state.value.pendingDelete" :mode="screen.state.value.definition?.Delete?.Mode === 'archive' ? 'archive' : 'hard_delete'" :messages="props.messages" :translate="translate" :busy="loading" @cancel="screen.cancelDelete" @confirm="screen.confirmDelete" />

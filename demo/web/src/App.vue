@@ -1,8 +1,13 @@
 <script setup lang="ts">
+import { shallowRef } from 'vue'
+import type { CrudRecord } from '@clear-platform-br/crud-client'
 import { HttpCrudClient } from '@clear-platform-br/crud-client'
 import { CrudScreen, ptBR } from '@clear-platform-br/crud-vue'
 import DefinitionAccordion from './components/DefinitionAccordion.vue'
+import ReportDetailsInline from './components/ReportDetailsInline.vue'
+import ReportDetailsPanel from './components/ReportDetailsPanel.vue'
 import { definitionSnippets } from './definitionSnippets'
+import { groupedReportDetailsResource, groupedReportResource, loadGroupedReportDetails } from './reportDetails'
 
 const resource = 'clear_crud_minimal_demo_contacts'
 const translatedResource = 'clear_crud_minimal_demo_contacts_ptbr'
@@ -13,12 +18,56 @@ const enumResource = 'clear_crud_disposable_junk_contacts_enum'
 const enumControlsResource = 'clear_crud_enum_controls_demo'
 const lookupResource = 'clear_crud_reference_lookup_demo'
 const readModelResource = 'clear_crud_reference_read_model_demo'
-const groupedReportResource = 'clear_crud_grouped_report_demo'
 const auxiliaryCatalogResource = 'clear_crud_auxiliary_catalogs'
 const auxiliaryCatalogLookupResource = 'clear_crud_auxiliary_catalog_lookup_demo'
 const auxiliaryCatalogChannelLookupResource = 'clear_crud_auxiliary_catalog_channel_lookup_demo'
 const auxiliaryDetailLookupResource = 'clear_crud_auxiliary_catalog_detail_lookup_demo'
 const client = new HttpCrudClient({ baseUrl: '/api/v1/crud' })
+const selectedReportRecordID = shallowRef('')
+const selectedReportDetails = shallowRef<CrudRecord[]>([])
+const reportDetailsOpen = shallowRef(false)
+const reportDetailsLoading = shallowRef(false)
+const reportDetailsFailed = shallowRef(false)
+const reportDetailsLoaded = shallowRef(false)
+let reportDetailsRequest: AbortController | undefined
+
+async function loadReportDetails(recordID: string): Promise<void> {
+  if (selectedReportRecordID.value === recordID && (reportDetailsLoading.value || reportDetailsLoaded.value)) return
+  reportDetailsRequest?.abort()
+  const request = new AbortController()
+  reportDetailsRequest = request
+  selectedReportRecordID.value = recordID
+  selectedReportDetails.value = []
+  reportDetailsLoading.value = true
+  reportDetailsFailed.value = false
+  reportDetailsLoaded.value = false
+
+  try {
+    const lines = await loadGroupedReportDetails(client, recordID, request.signal)
+    if (reportDetailsRequest !== request) return
+    selectedReportDetails.value = lines
+    reportDetailsLoaded.value = true
+  } catch {
+    if (!request.signal.aborted && reportDetailsRequest === request) {
+      reportDetailsFailed.value = true
+      reportDetailsLoaded.value = true
+    }
+  } finally {
+    if (reportDetailsRequest === request) {
+      reportDetailsLoading.value = false
+      reportDetailsRequest = undefined
+    }
+  }
+}
+
+function openReportDetailsModal(recordID: string): void {
+  void loadReportDetails(recordID)
+  reportDetailsOpen.value = true
+}
+
+function closeReportDetails(): void {
+  reportDetailsOpen.value = false
+}
 
 const labels: Record<string, string> = {
   [`crud.${resource}.title`]: 'Defaults automáticos — somente tabela',
@@ -41,6 +90,8 @@ const labels: Record<string, string> = {
   [`crud.${readModelResource}.singular`]: 'Contato enriquecido',
   [`crud.${groupedReportResource}.title`]: 'Relatório — quebras em níveis',
   [`crud.${groupedReportResource}.singular`]: 'Documento do relatório',
+  [`crud.${groupedReportDetailsResource}.title`]: 'Linhas do relatório',
+  [`crud.${groupedReportDetailsResource}.singular`]: 'Linha do relatório',
   [`crud.${auxiliaryCatalogResource}.title`]: 'Tabela de Tabelas (TdT)',
   [`crud.${auxiliaryCatalogResource}.singular`]: 'Tabela da TdT',
   [`crud.${auxiliaryCatalogLookupResource}.title`]: 'Consumidor da TdT',
@@ -99,9 +150,12 @@ const labels: Record<string, string> = {
   'crud.field.year': 'Ano',
   'crud.field.month': 'Mês',
   'crud.field.document_name': 'Documento',
-  'crud.field.amount_cents': 'Valor (centavos)',
+  'crud.field.amount_cents': 'Valor',
+  'crud.field.report_id': 'ID do relatório',
+  'crud.field.line_number': 'Linha',
+  'crud.field.description': 'Descrição',
   'crud.report.documents': 'Documentos',
-  'crud.report.amount_cents': 'Total (centavos)',
+  'crud.report.amount_cents': 'Total',
   'crud.field.selected_option': 'Item da TdT',
   'crud.field.active': 'Ativo',
   'crud.field.code': 'Código do catálogo',
@@ -253,10 +307,51 @@ function translate(code: string): string | undefined {
     <section class="demo-example">
       <header class="demo-page-heading">
         <h2><span class="demo-smoke-label">Smoke 12 · relatório agrupado</span> Ano, mês e subtotais calculados pelo SQL</h2>
-        <p>A tabela intercala as quebras por ano e mês. Contagem e soma são calculadas pelo adapter SQL sobre todos os registros filtrados e do tenant, não apenas sobre as linhas da página; o Vue só exibe os valores recebidos.</p>
+        <p>A tabela intercala as quebras por ano e mês. Contagem e soma são calculadas pelo adapter SQL sobre todos os registros filtrados e do tenant, não apenas sobre as linhas da página. Clique em <strong>Detalhes</strong>: as linhas vinculadas aparecem logo abaixo do documento selecionado.</p>
       </header>
       <DefinitionAccordion title="Definição Go deste relatório" subtitle="Abra para ver níveis, medidas e SELECT server-owned" :code="definitionSnippets.groupedReport" />
-      <CrudScreen :resource="groupedReportResource" :client="client" :messages="ptBR" :resolve-message="translate" />
+      <CrudScreen
+        :resource="groupedReportResource"
+        :client="client"
+        :messages="ptBR"
+        :resolve-message="translate"
+        record-details-label="Detalhes"
+        @record-details="loadReportDetails"
+      >
+        <template #record-details="{ recordId }">
+          <ReportDetailsInline
+            :record-id="recordId"
+            :lines="recordId === selectedReportRecordID ? selectedReportDetails : []"
+            :loading="recordId === selectedReportRecordID && reportDetailsLoading"
+            :failed="recordId === selectedReportRecordID && reportDetailsFailed"
+          />
+        </template>
+      </CrudScreen>
+    </section>
+    <section class="demo-example">
+      <header class="demo-page-heading">
+        <h2><span class="demo-smoke-label">Smoke 13 · o mesmo relatório</span> As mesmas linhas em modal</h2>
+        <p>Usa o mesmo recurso, registros, filtro de tenant e read model do Smoke 12. Aqui o host trata o evento <code>record-details</code> e abre um modal, sem slot inline: o desenvolvedor escolhe a apresentação sem mudar dados ou definição Go.</p>
+      </header>
+      <DefinitionAccordion title="Definição Go deste relatório" subtitle="A mesma definição Go do Smoke 12; só muda a apresentação Vue" :code="definitionSnippets.groupedReport" />
+      <div class="report-grid-modal-scope">
+        <CrudScreen
+          :resource="groupedReportResource"
+          :client="client"
+          :messages="ptBR"
+          :resolve-message="translate"
+          record-details-label="Detalhes"
+          @record-details="openReportDetailsModal"
+        />
+        <ReportDetailsPanel
+          :open="reportDetailsOpen"
+          :record-id="selectedReportRecordID"
+          :lines="selectedReportDetails"
+          :loading="reportDetailsLoading"
+          :failed="reportDetailsFailed"
+          @close="closeReportDetails"
+        />
+      </div>
     </section>
   </main>
 </template>
@@ -270,7 +365,9 @@ function translate(code: string): string | undefined {
 .demo-page-heading h2 { font-size: clamp(1.45rem, 2.15vw, 1.95rem); }
 .demo-page-heading p { max-width: 70rem; margin: 0; color: #52615e; font-size: 1.04rem; line-height: 1.55; }
 .demo-example { max-width: 72rem; margin: 3rem auto 0; }
+.report-grid-modal-scope { position: relative; min-width: 0; }
 .demo-example code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
+.demo-host-event { margin: 0.75rem 0; padding: 0.75rem 1rem; border-inline-start: 3px solid #1f7a68; background: #e8f4ef; }
 .demo-smoke-label { color: #1c776b; font-size: clamp(0.95rem, 1.25vw, 1.08rem); font-weight: 800; letter-spacing: 0.025em; white-space: nowrap; }
 :global(body:has([data-clear-crud-theme="dark"])) .demo-page { background: #15191e; color: #edf2f7; }
 :global(body:has([data-clear-crud-theme="dark"])) .demo-page-heading h1 { color: #edf2f7; }

@@ -21,7 +21,7 @@ ou renderer, e `-` significa que ainda não deve ser usado.
 | Lookup | Valor separado de label, dependências dinâmicas, filtros fixos server-owned por lista tipada (igualdade ou pertencimento), busca, primeira página limitada, cache bounded (512 entradas/5 min por default) e resolução do label na grade. |
 | Catálogo global | `RegisterAutoGlobalTable` para referência compartilhada, read-only e sem duplicação por tenant. |
 | Metadados | `MetadataSource` promove `CHECK`/enum finito para opções estruturais e pode marcar campos de modelos de leitura como somente leitura durante o bootstrap. |
-| Vue | Renderer embutível, responsivo, pt-BR/en-US, tema claro/escuro, densidade, controles de enum e título contextual opcional via `Presentation.TitleField`, com fallback server-owned. |
+| Vue | Renderer embutível, responsivo, pt-BR/en-US, tema claro/escuro, densidade, controles de enum, título contextual via `Presentation.TitleField`, formatação numérica declarativa na grade/subtotais e ação de detalhes opt-in que emite somente o ID ao host. |
 | Tradução | `MessageCode` estável e catálogos fornecidos pelo consumidor; Weblate foi escolhido como fluxo externo de gestão, revisão e sincronização, sem dependência no runtime. |
 | Operação | `AuditSink`, correlation ID, erros públicos sanitizados, testes, race, vet, cobertura e govulncheck no gate. |
 
@@ -109,6 +109,13 @@ O HTTP representa medidas inteiras como strings decimais exatas para evitar
 arredondamento no JavaScript. Paginação cursor, total geral e medidas
 adicionais ainda não são suportados.
 
+Campos numéricos e medidas podem declarar `NumericDisplay` para localização,
+moeda, escala de unidades menores, casas decimais mínimas ou prefixo/sufixo.
+Essa metadata altera apenas a string renderizada no grid/subtotal: números
+continuam numéricos (ou strings decimais exatas no transporte), sem texto
+concatenado no valor usado por filtros, ordenação e contas. Nenhuma moeda ou
+unidade é presumida pelo core.
+
 ## Ainda não disponível
 
 - equivalência de modelos de leitura registrados nos adapters PostgreSQL,
@@ -121,7 +128,7 @@ adicionais ainda não são suportados.
 - validadores declarativos de regex e transformações tipadas;
 - exportação CSV, seleção em massa e edição inline;
 - anexos, imagens, documentos, miniaturas e URLs temporárias;
-- formatação localizada de datas, horas e números;
+- formatação localizada de datas/horas e origem confiável de timezone;
 - invalidação distribuída de cache e orçamento/timeouts de consulta;
 - testes de carga e política formal para evitar `COUNT(*)` repetido;
 - adapters PostgreSQL, MySQL e MariaDB.

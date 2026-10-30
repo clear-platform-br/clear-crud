@@ -30,6 +30,9 @@ func TestValidateReportRejectsUnsafeOrAmbiguousDeclarations(t *testing.T) {
 		{name: "unknown operation", mutate: func(report *ReportDefinition, _ map[FieldKey]Field, _ map[FieldKey]struct{}, _ *PaginationDefinition) {
 			report.Measures[0].Operation = "avg"
 		}, path: "grid.report.measures[0].operation"},
+		{name: "measure display requires locale", mutate: func(report *ReportDefinition, _ map[FieldKey]Field, _ map[FieldKey]struct{}, _ *PaginationDefinition) {
+			report.Measures[0].NumericDisplay = &NumericDisplay{Currency: "BRL"}
+		}, path: "grid.report.measures[0].numericDisplay.locale"},
 		{name: "sum requires integer", mutate: func(report *ReportDefinition, fields map[FieldKey]Field, _ map[FieldKey]struct{}, _ *PaginationDefinition) {
 			report.Measures[0] = ReportMeasure{Key: "sum", Label: "crud.sum", Operation: ReportSum, Field: "amount"}
 			fields["amount"] = Field{Key: "amount", Type: FieldString}
@@ -57,6 +60,17 @@ func TestValidateReportRejectsUnsafeOrAmbiguousDeclarations(t *testing.T) {
 				t.Fatalf("validateReport() error = %v, want path %q", err, test.path)
 			}
 		})
+	}
+}
+
+func TestCloneReportDefinitionClonesNumericDisplay(t *testing.T) {
+	t.Parallel()
+	display := &NumericDisplay{Locale: "pt-BR", Currency: "BRL", Scale: 2}
+	definition := &ReportDefinition{Measures: []ReportMeasure{{Key: "amount", Label: "report.amount", Operation: ReportSum, NumericDisplay: display}}}
+	clone := cloneReportDefinition(definition)
+	display.Locale = "en-US"
+	if clone.Measures[0].NumericDisplay.Locale != "pt-BR" {
+		t.Fatal("cloned report formatting must not retain caller-owned metadata")
 	}
 }
 

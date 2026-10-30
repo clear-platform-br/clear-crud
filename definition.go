@@ -105,6 +105,18 @@ type BooleanDisplay struct {
 	False string
 }
 
+// NumericDisplay describes presentation-only formatting for a numeric value.
+// Prefix, suffix, locale, currency and scale never change the stored or
+// transported value. Scale is used only when an integer stores minor units.
+type NumericDisplay struct {
+	Locale                string
+	Currency              string `json:",omitempty"`
+	Scale                 uint8  `json:",omitempty"`
+	MinimumFractionDigits uint8  `json:",omitempty"`
+	Prefix                string `json:",omitempty"`
+	Suffix                string `json:",omitempty"`
+}
+
 // EnumControl selects the semantic input used to choose one enum value.
 // Buttons are separate actions; segmented keeps adjacent actions visually joined.
 // Auto lets the renderer adapt to option count and viewport size.
@@ -148,6 +160,7 @@ type Field struct {
 	// fields; dynamic defaults remain adapter-owned.
 	Default        Value           `json:",omitempty"`
 	BooleanDisplay *BooleanDisplay `json:",omitempty"`
+	NumericDisplay *NumericDisplay `json:",omitempty"`
 	EnumControl    EnumControl     `json:",omitempty"`
 	// Pattern is a server-owned RE2 expression applied to string-backed values.
 	// The expression is declarative metadata; it is never accepted from HTTP.

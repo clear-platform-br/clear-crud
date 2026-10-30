@@ -39,7 +39,7 @@ function goTo(page: number): void {
 </script>
 
 <template>
-  <nav v-if="page" class="crud-pagination" data-clear-crud-part="pagination" :aria-label="messages.search">
+  <nav v-if="page && totalPages !== 1" class="crud-pagination" data-clear-crud-part="pagination" :aria-label="messages.search">
     <button class="crud-action crud-pagination-control" type="button" :aria-label="messages.previousPage" :title="messages.previousPage" :disabled="previousDisabled" @click="emit('previous')">‹</button>
     <div v-if="pageItems.length" class="crud-pagination-pages">
       <template v-for="item in pageItems" :key="item.kind === 'page' ? item.value : item.key">
